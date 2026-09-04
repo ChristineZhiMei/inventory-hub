@@ -21,7 +21,7 @@
     "build:server": "pnpm --filter @inventory-hub/server build",
     "build:web": "pnpm --filter @inventory-hub/web build",
     "build:desktop": "pnpm --filter @inventory-hub/desktop build",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm build:contracts && pnpm build:core && pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "clean": "pnpm -r --if-present clean",
     "package:mac:arm64": "pnpm build && pnpm --filter @inventory-hub/desktop package:mac:arm64",
