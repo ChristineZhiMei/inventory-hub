@@ -6,7 +6,7 @@ import { pageItems, queries } from "@/lib/queries";
 import type { NodeType } from "@/lib/types";
 import { NodeCard } from "@/components/NodeCard";
 import { QueryError } from "@/components/Page";
-import { Alert, EmptyState, Segmented, Skeleton } from "@/components/ui";
+import { Alert, EmptyState, Segmented, Skeleton } from "@/components/AntUi";
 
 type LocationFilter = "ALL" | Exclude<NodeType, "ITEM">;
 export function LocationsPage() {

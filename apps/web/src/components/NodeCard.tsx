@@ -2,7 +2,7 @@ import { Archive, Box, ChevronRight, Package, Warehouse } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { InventoryNode, NodeType, StockStatus } from "@/lib/types";
 import { imageUrl } from "@/lib/api";
-import { Badge, Card } from "./ui";
+import { Badge, Button, Card } from "./AntUi";
 
 const icons: Record<NodeType, typeof Archive> = { ITEM: Archive, BAG: Package, BOX: Box, WAREHOUSE: Warehouse };
 const typeNames: Record<NodeType, string> = { ITEM: "物品", BAG: "袋子", BOX: "箱子", WAREHOUSE: "仓库" };
@@ -21,6 +21,6 @@ export function NodeCard({ node, selectable, selected, onSelect }: { node: Inven
       <div className="flex min-w-0 flex-1 flex-col p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{node.name}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{node.code}</p></div><StatusBadge status={node.stockStatus} /></div><div className="mt-auto flex justify-end pt-3"><ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></div></div>
     </div>
   </Card>;
-  if (selectable) return <button type="button" onClick={() => onSelect?.(node)} className={`w-full rounded-lg text-left ${selected ? "ring-2 ring-primary" : ""}`}>{content}</button>;
+  if (selectable) return <Button variant="ghost" onClick={() => onSelect?.(node)} className={`h-auto w-full rounded-lg p-0 text-left ${selected ? "ring-2 ring-primary" : ""}`}>{content}</Button>;
   return <Link to={destination} className="block rounded-lg focus-visible:outline-none">{content}</Link>;
 }

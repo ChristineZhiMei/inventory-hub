@@ -42,10 +42,11 @@ import {
   CardTitle,
   Dialog,
   EmptyState,
+  Input,
   Segmented,
   Select,
   Skeleton,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 export function NodeDetailPage() {
   const { id } = useParams();
@@ -617,10 +618,10 @@ export function NodeDetailPage() {
         >
           输入编号 <strong>{node.code}</strong> 确认
         </label>
-        <input
+        <Input
           id="hard-delete-confirmation"
           name="hard-delete-confirmation"
-          className="mt-2 min-h-11 w-full rounded-md border bg-card px-3"
+          className="mt-2"
           value={confirmCode}
           onChange={(e) => setConfirmCode(e.target.value.toUpperCase())}
           autoComplete="off"

@@ -5,22 +5,28 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  ListFilter,
   PackagePlus,
+  RotateCcw,
   Search,
   Square,
 } from "lucide-react";
+import { Popup } from "antd-mobile";
 import { Link, useSearchParams } from "react-router-dom";
 import { pageItems, queries } from "@/lib/queries";
 import type { InventoryAction, InventoryNode } from "@/lib/types";
 import { InventoryActionDialog } from "@/components/InventoryActionDialog";
 import { NodeCard } from "@/components/NodeCard";
 import { QueryError } from "@/components/Page";
-import { Button, EmptyState, Input, Select, Skeleton } from "@/components/ui";
+import { Button, EmptyState, Input, Select, Skeleton } from "@/components/AntUi";
+import { useMediaQuery } from "@/lib/media";
 
 export function ItemsPage() {
   const [params, setParams] = useSearchParams();
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [action, setAction] = useState<InventoryAction | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const mobile = useMediaQuery("(max-width: 767px)");
   const queryString = params.toString();
   const request = new URLSearchParams(params);
   request.set("limit", "30");
@@ -54,6 +60,79 @@ export function ItemsPage() {
         : [...current, node],
     );
   }
+  const advancedFilterKeys = [
+    "status",
+    "categoryId",
+    "tagIds",
+    "locationId",
+  ];
+  const advancedFilterCount = advancedFilterKeys.filter((key) =>
+    params.get(key),
+  ).length;
+  function toggleAll() {
+    setSelected(selected.length === items.length ? [] : items);
+  }
+  function resetAdvancedFilters() {
+    const next = new URLSearchParams(params);
+    advancedFilterKeys.forEach((key) => next.delete(key));
+    next.delete("cursor");
+    setParams(next, { replace: true });
+    setSelected([]);
+  }
+  const advancedFilters = (
+    <>
+      <Select
+        name="item-status"
+        value={params.get("status") || ""}
+        onChange={(event) => setFilter("status", event.target.value)}
+        aria-label="库存状态"
+      >
+        <option value="">全部状态</option>
+        <option value="IN_STOCK">在库</option>
+        <option value="OUT">已出库</option>
+        <option value="DISCARDED">已废弃</option>
+      </Select>
+      <Select
+        name="item-category"
+        value={params.get("categoryId") || ""}
+        onChange={(event) => setFilter("categoryId", event.target.value)}
+        aria-label="分类"
+      >
+        <option value="">全部分类</option>
+        {pageItems(categories.data).map((category) => (
+          <option value={category.id} key={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </Select>
+      <Select
+        name="item-tag"
+        value={params.get("tagIds") || ""}
+        onChange={(event) => setFilter("tagIds", event.target.value)}
+        aria-label="标签"
+      >
+        <option value="">全部标签</option>
+        {pageItems(tags.data).map((tag) => (
+          <option value={tag.id} key={tag.id}>
+            {tag.name}
+          </option>
+        ))}
+      </Select>
+      <Select
+        name="item-location"
+        value={params.get("locationId") || ""}
+        onChange={(event) => setFilter("locationId", event.target.value)}
+        aria-label="所在位置"
+      >
+        <option value="">全部位置</option>
+        {pageItems(locations.data).map((location) => (
+          <option value={location.id} key={location.id}>
+            {location.name} · {location.code}
+          </option>
+        ))}
+      </Select>
+    </>
+  );
   return (
     <div>
       <div className="mb-3 flex justify-end">
@@ -65,83 +144,66 @@ export function ItemsPage() {
           新建物品
         </Link>
       </div>
-      <div className="surface mb-5 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(140px,180px))_auto]">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            name="item-query"
-            value={params.get("q") || ""}
-            onChange={(event) => setFilter("q", event.target.value)}
-            placeholder="搜索名称、编号、分类或标签"
-            className="pl-9"
-            aria-label="搜索物品"
-          />
+      {mobile ? (
+        <div className="mobile-item-filters mb-5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              name="item-query-mobile"
+              value={params.get("q") || ""}
+              onChange={(event) => setFilter("q", event.target.value)}
+              placeholder="搜索名称、编号、分类或标签"
+              className="pl-9"
+              aria-label="搜索物品"
+            />
+          </div>
+          <div className="mobile-item-filters__actions">
+            <Button variant="outline" onClick={() => setFilterOpen(true)}>
+              <ListFilter className="size-4" />
+              筛选{advancedFilterCount ? `（${advancedFilterCount}）` : ""}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={toggleAll}
+              disabled={!items.length}
+            >
+              {selected.length === items.length && items.length ? (
+                <CheckSquare className="size-4" />
+              ) : (
+                <Square className="size-4" />
+              )}
+              {selected.length ? `已选 ${selected.length}` : "批量选择"}
+            </Button>
+          </div>
         </div>
-        <Select
-          name="item-status"
-          value={params.get("status") || ""}
-          onChange={(event) => setFilter("status", event.target.value)}
-          aria-label="库存状态"
-        >
-          <option value="">全部状态</option>
-          <option value="IN_STOCK">在库</option>
-          <option value="OUT">已出库</option>
-          <option value="DISCARDED">已废弃</option>
-        </Select>
-        <Select
-          name="item-category"
-          value={params.get("categoryId") || ""}
-          onChange={(event) => setFilter("categoryId", event.target.value)}
-          aria-label="分类"
-        >
-          <option value="">全部分类</option>
-          {pageItems(categories.data).map((category) => (
-            <option value={category.id} key={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          name="item-tag"
-          value={params.get("tagIds") || ""}
-          onChange={(event) => setFilter("tagIds", event.target.value)}
-          aria-label="标签"
-        >
-          <option value="">全部标签</option>
-          {pageItems(tags.data).map((tag) => (
-            <option value={tag.id} key={tag.id}>
-              {tag.name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          name="item-location"
-          value={params.get("locationId") || ""}
-          onChange={(event) => setFilter("locationId", event.target.value)}
-          aria-label="所在位置"
-        >
-          <option value="">全部位置</option>
-          {pageItems(locations.data).map((location) => (
-            <option value={location.id} key={location.id}>
-              {location.name} · {location.code}
-            </option>
-          ))}
-        </Select>
-        <Button
-          variant="outline"
-          onClick={() =>
-            setSelected(selected.length === items.length ? [] : items)
-          }
-          disabled={!items.length}
-        >
-          {selected.length === items.length && items.length ? (
-            <CheckSquare className="size-4" />
-          ) : (
-            <Square className="size-4" />
-          )}
-          {selected.length ? `已选 ${selected.length}` : "批量选择"}
-        </Button>
-      </div>
+      ) : (
+        <div className="surface filter-toolbar mb-5 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(140px,180px))_auto]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              name="item-query"
+              value={params.get("q") || ""}
+              onChange={(event) => setFilter("q", event.target.value)}
+              placeholder="搜索名称、编号、分类或标签"
+              className="pl-9"
+              aria-label="搜索物品"
+            />
+          </div>
+          {advancedFilters}
+          <Button
+            variant="outline"
+            onClick={toggleAll}
+            disabled={!items.length}
+          >
+            {selected.length === items.length && items.length ? (
+              <CheckSquare className="size-4" />
+            ) : (
+              <Square className="size-4" />
+            )}
+            {selected.length ? `已选 ${selected.length}` : "批量选择"}
+          </Button>
+        </div>
+      )}
       {selected.length > 0 && (
         <div className="sticky top-20 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 p-3 shadow-raised backdrop-blur">
           <span className="mr-auto text-sm font-medium">
@@ -241,6 +303,32 @@ export function ItemsPage() {
           setSelected([]);
         }}
       />
+      {mobile && (
+        <Popup
+          visible={filterOpen}
+          onMaskClick={() => setFilterOpen(false)}
+          onClose={() => setFilterOpen(false)}
+          bodyClassName="mobile-filter-popup"
+          bodyStyle={{ maxHeight: "88dvh" }}
+        >
+          <div className="mobile-filter-popup__header">
+            <strong>筛选物品</strong>
+            <span>{advancedFilterCount ? `已启用 ${advancedFilterCount} 项` : "未启用筛选"}</span>
+          </div>
+          <div className="mobile-filter-popup__body">{advancedFilters}</div>
+          <div className="mobile-filter-popup__footer">
+            <Button
+              variant="outline"
+              onClick={resetAdvancedFilters}
+              disabled={!advancedFilterCount}
+            >
+              <RotateCcw className="size-4" />
+              重置
+            </Button>
+            <Button onClick={() => setFilterOpen(false)}>完成</Button>
+          </div>
+        </Popup>
+      )}
     </div>
   );
 }

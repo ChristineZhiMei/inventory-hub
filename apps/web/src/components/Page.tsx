@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "./ui";
+import { Button } from "./AntUi";
 
 export function PageHeader({ title, actions, back }: { title: string; description?: string; actions?: ReactNode; back?: boolean }) {
   const navigate = useNavigate();

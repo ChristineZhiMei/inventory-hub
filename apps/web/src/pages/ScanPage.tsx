@@ -15,7 +15,7 @@ import {
   CardTitle,
   EmptyState,
   Segmented,
-} from "@/components/ui";
+} from "@/components/AntUi";
 import { api } from "@/lib/api";
 import { queries } from "@/lib/queries";
 
@@ -121,8 +121,9 @@ export function ScanPage() {
                         <span className="min-w-0 flex-1 truncate text-sm">
                           {node.name}
                         </span>
-                        <button
-                          className="grid size-11 place-items-center rounded-md hover:bg-muted"
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() =>
                             setPending((current) =>
                               current.filter((item) => item.id !== node.id),
@@ -131,7 +132,7 @@ export function ScanPage() {
                           aria-label={`移除 ${node.name}`}
                         >
                           <Trash2 className="size-4" />
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>

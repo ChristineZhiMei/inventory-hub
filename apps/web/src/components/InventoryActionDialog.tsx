@@ -7,7 +7,7 @@ import type {
   InventoryNode,
   OperationPreview,
 } from "@/lib/types";
-import { Alert, Button, Dialog, Field, Select, Textarea } from "./ui";
+import { Alert, Button, Dialog, Field, Select, Textarea } from "./AntUi";
 
 const labels: Record<
   InventoryAction,

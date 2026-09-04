@@ -35,7 +35,7 @@ import {
   Field,
   Input,
   Select,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 const pages = [
   { id: "account", label: "账号", icon: CircleUserRound },
@@ -53,7 +53,7 @@ export function SettingsPage() {
   return (
     <div>
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <nav className="surface h-fit p-2" aria-label="设置导航">
+        <nav className="surface settings-nav h-fit p-2" aria-label="设置导航">
           {pages.map(({ id, label, icon: Icon }) => (
             <Link
               key={id}

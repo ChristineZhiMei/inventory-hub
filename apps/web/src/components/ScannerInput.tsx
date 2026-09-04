@@ -3,7 +3,7 @@ import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { Camera, CameraOff, Keyboard, ScanLine } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { normalizeCode } from "@/lib/utils";
-import { Alert, Button, Input } from "./ui";
+import { Alert, Button, Input } from "./AntUi";
 
 export function ScannerInput({ onCode, paused = false, label = "扫描或输入编号" }: { onCode: (code: string) => void | Promise<void>; paused?: boolean; label?: string }) {
   const [code, setCode] = useState("");

@@ -19,7 +19,7 @@ import {
   Input,
   Segmented,
   Select,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 type Tab = "categories" | "tags";
 type EditTarget =

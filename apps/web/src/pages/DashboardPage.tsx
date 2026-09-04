@@ -26,7 +26,7 @@ import {
   CardHeader,
   CardTitle,
   Skeleton,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 export function DashboardPage() {
   const query = useQuery({
@@ -90,13 +90,13 @@ export function DashboardPage() {
                 <Icon className="size-6" />
               </div>
               <div>
-                <p className="stat-number">
+                <div className="stat-number">
                   {query.isLoading ? (
                     <Skeleton className="h-8 w-14" />
                   ) : (
                     (value ?? 0)
                   )}
-                </p>
+                </div>
                 <p className="text-sm text-muted-foreground">{label}</p>
               </div>
             </CardContent>

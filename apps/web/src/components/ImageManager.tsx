@@ -1,8 +1,9 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { Upload, type UploadProps } from "antd";
 import { Camera, ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Alert, Button } from "./ui";
+import { Alert, Button } from "./AntUi";
 
 export type EditableImage = { key: string; imageId?: string; uploadId?: string; preview: string; state: "existing" | "uploading" | "processing" | "ready" | "failed"; error?: string; file?: File };
 
@@ -32,17 +33,14 @@ export function ImageManager({ value: items, onChange, required = false, disable
     }
   }
 
-  function pick(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
+  const beforeUpload: UploadProps["beforeUpload"] = (file, files) => {
     setSelectionError("");
-    if (items.length + files.length > 5) { setSelectionError("每个档案最多保存 5 张图片"); return; }
-    for (const file of files) {
-      if (file.size > 25 * 1024 * 1024) { setSelectionError(`${file.name} 超过 25 MiB`); continue; }
-      if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(file.type)) { setSelectionError(`${file.name} 的格式暂不支持，仅支持 JPEG、PNG、WebP`); continue; }
-      void processFile(file);
-    }
-  }
+    if (items.length + files.length > 5) { setSelectionError("每个档案最多保存 5 张图片"); return Upload.LIST_IGNORE; }
+    if (file.size > 25 * 1024 * 1024) { setSelectionError(`${file.name} 超过 25 MiB`); return Upload.LIST_IGNORE; }
+    if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(file.type)) { setSelectionError(`${file.name} 的格式暂不支持，仅支持 JPEG、PNG、WebP`); return Upload.LIST_IGNORE; }
+    void processFile(file);
+    return Upload.LIST_IGNORE;
+  };
   async function remove(index: number) {
     const item = items[index];
     if (item.uploadId && item.state !== "existing") void api(`/uploads/${item.uploadId}`, { method: "DELETE" }).catch(() => undefined);
@@ -54,10 +52,10 @@ export function ImageManager({ value: items, onChange, required = false, disable
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{items.map((item, index) => <div key={item.key} className={cn("group relative aspect-square overflow-hidden rounded-md border bg-muted", item.state === "failed" && "border-destructive")}>
       <img src={item.preview} alt={`图片 ${index + 1}${index === 0 ? "，封面" : ""}`} className="size-full object-cover" />
       {item.state === "uploading" || item.state === "processing" ? <div className="absolute inset-0 grid place-items-center bg-slate-950/55 text-white"><div className="text-center"><LoaderCircle className="mx-auto size-6 animate-spin" /><p className="mt-2 text-xs">{item.state === "uploading" ? "上传中" : "处理中"}</p></div></div> : null}
-      {item.state === "failed" && <div className="absolute inset-x-0 bottom-0 bg-red-950/85 p-2 text-xs text-white"><p className="line-clamp-2">{item.error}</p>{item.file && <button type="button" className="mt-1 inline-flex items-center gap-1 underline" onClick={() => retry(index)}><RotateCcw className="size-3" />重试</button>}</div>}
-      <div className="absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-slate-950/65 to-transparent p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><div className="flex"><button type="button" disabled={index === 0} onClick={() => move(index, -1)} className="grid size-9 place-items-center rounded text-white hover:bg-white/20 disabled:opacity-30" aria-label="前移"><ChevronLeft className="size-4" /></button><button type="button" disabled={index === items.length - 1} onClick={() => move(index, 1)} className="grid size-9 place-items-center rounded text-white hover:bg-white/20 disabled:opacity-30" aria-label="后移"><ChevronRight className="size-4" /></button></div><button type="button" onClick={() => remove(index)} className="grid size-9 place-items-center rounded text-white hover:bg-red-500/75" aria-label="删除图片"><Trash2 className="size-4" /></button></div>
+      {item.state === "failed" && <div className="absolute inset-x-0 bottom-0 bg-red-950/85 p-2 text-xs text-white"><p className="line-clamp-2">{item.error}</p>{item.file && <Button variant="ghost" size="sm" className="mt-1 text-white underline" onClick={() => retry(index)}><RotateCcw className="size-3" />重试</Button>}</div>}
+      <div className="absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-slate-950/65 to-transparent p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><div className="flex"><Button variant="ghost" size="icon" disabled={index === 0} onClick={() => move(index, -1)} className="image-action" aria-label="前移"><ChevronLeft className="size-4" /></Button><Button variant="ghost" size="icon" disabled={index === items.length - 1} onClick={() => move(index, 1)} className="image-action" aria-label="后移"><ChevronRight className="size-4" /></Button></div><Button variant="ghost" size="icon" onClick={() => remove(index)} className="image-action image-action--danger" aria-label="删除图片"><Trash2 className="size-4" /></Button></div>
       {index === 0 && <span className="absolute bottom-2 left-2 rounded bg-slate-950/75 px-2 py-1 text-xs text-white">封面</span>}
-    </div>)}{items.length < 5 && <label className={cn("grid aspect-square min-h-28 cursor-pointer place-items-center rounded-md border border-dashed bg-card text-center transition-colors hover:bg-muted focus-within:ring-2 focus-within:ring-ring/30", disabled && "pointer-events-none opacity-50")}><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={pick} disabled={disabled} /><span><span className="mx-auto grid size-10 place-items-center rounded-full bg-muted"><ImagePlus className="size-5 text-muted-foreground" /></span><span className="mt-2 block text-xs font-medium">拍照或选择图片</span><span className="mt-1 block text-[11px] text-muted-foreground">{items.length}/5</span></span></label>}</div>
+    </div>)}{items.length < 5 && <Upload accept="image/jpeg,image/png,image/webp" capture="environment" multiple disabled={disabled} showUploadList={false} beforeUpload={beforeUpload} className="app-image-upload"><div className={cn("grid aspect-square min-h-28 cursor-pointer place-items-center rounded-md border border-dashed bg-card text-center transition-colors hover:bg-muted", disabled && "pointer-events-none opacity-50")}><span><span className="mx-auto grid size-10 place-items-center rounded-full bg-muted"><ImagePlus className="size-5 text-muted-foreground" /></span><span className="mt-2 block text-xs font-medium">拍照或选择图片</span><span className="mt-1 block text-[11px] text-muted-foreground">{items.length}/5</span></span></div></Upload>}</div>
     {selectionError && <Alert title="无法添加图片" tone="error" className="mt-3">{selectionError}</Alert>}
     <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Camera className="size-4" /><span>{required ? "物品至少需要一张图片。" : "图片可选。"}上传后将压缩并生成缩略图。</span></div>
   </div>;

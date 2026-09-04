@@ -5,7 +5,7 @@ import { queries } from "@/lib/queries";
 import type { NodeType } from "@/lib/types";
 import { NodeForm, type NodeFormData } from "@/components/NodeForm";
 import { PageHeader, QueryError } from "@/components/Page";
-import { Alert, Skeleton } from "@/components/ui";
+import { Alert, Skeleton } from "@/components/AntUi";
 import type { EditableImage } from "@/components/ImageManager";
 
 export function NodeEditorPage({

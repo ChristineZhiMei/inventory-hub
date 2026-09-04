@@ -1,80 +1,62 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import gsap from "gsap";
 import {
-  Archive,
-  Boxes,
-  ChevronRight,
-  CircleUserRound,
-  CloudOff,
-  History,
-  House,
-  Menu,
-  PackagePlus,
-  Printer,
-  ScanLine,
-  Search,
-  Settings,
-  Shapes,
-  Warehouse,
-  X,
-} from "lucide-react";
-import {
-  Link,
-  NavLink,
-  Outlet,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+  AppstoreOutlined,
+  CloudOutlined,
+  FolderOpenOutlined,
+  HistoryOutlined,
+  InboxOutlined,
+  MenuOutlined,
+  MoonOutlined,
+  PlusSquareOutlined,
+  PrinterOutlined,
+  ScanOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  SunOutlined,
+  TagsOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Menu, Switch } from "antd";
+import { Popup, TabBar } from "antd-mobile";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, resolvePendingRequest, unresolvedRequests } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
-import { Badge, Button, Input } from "./ui";
+import { useTheme } from "@/lib/theme";
+import { Badge, Button, Input } from "./AntUi";
 
 const primary = [
-  { to: "/", label: "概览", icon: House, end: true },
-  { to: "/items", label: "物品", icon: Archive },
-  { to: "/locations", label: "位置", icon: Warehouse },
-  { to: "/intake", label: "连续录入", icon: PackagePlus },
-  { to: "/scan", label: "扫码", icon: ScanLine },
-];
-const management = [
-  { to: "/operations", label: "操作记录", icon: History },
-  { to: "/print-jobs", label: "打印队列", icon: Printer },
-  { to: "/taxonomy", label: "分类与标签", icon: Shapes },
-  { to: "/settings", label: "设置", icon: Settings },
+  { to: "/", label: "概览", icon: <AppstoreOutlined /> },
+  { to: "/items", label: "物品", icon: <InboxOutlined /> },
+  { to: "/locations", label: "位置", icon: <FolderOpenOutlined /> },
+  { to: "/intake", label: "连续录入", mobileLabel: "录入", icon: <PlusSquareOutlined /> },
+  { to: "/scan", label: "扫码", icon: <ScanOutlined /> },
 ];
 
-function NavItem({
-  item,
-  onClick,
-}: {
-  item: (typeof primary)[number];
-  onClick?: () => void;
-}) {
-  const Icon = item.icon;
+const management = [
+  { to: "/operations", label: "操作记录", icon: <HistoryOutlined /> },
+  { to: "/print-jobs", label: "打印队列", icon: <PrinterOutlined /> },
+  { to: "/taxonomy", label: "分类与标签", icon: <TagsOutlined /> },
+  { to: "/settings", label: "设置", icon: <SettingOutlined /> },
+];
+
+const allNavigation = [...primary, ...management];
+
+function currentRoute(pathname: string) {
   return (
-    <NavLink
-      to={item.to}
-      end={item.end}
-      onClick={onClick}
-      className={({ isActive }) =>
-        cn(
-          "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-          isActive
-            ? "bg-accent text-accent-foreground"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        )
-      }
-    >
-      <Icon className="size-5" />
-      <span>{item.label}</span>
-    </NavLink>
+    [...allNavigation]
+      .sort((left, right) => right.to.length - left.to.length)
+      .find((item) =>
+        item.to === "/"
+          ? pathname === "/"
+          : pathname === item.to || pathname.startsWith(`${item.to}/`),
+      )?.to ?? "/"
   );
 }
 
 export function AppShell() {
   const auth = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -82,7 +64,11 @@ export function AppShell() {
   const [online, setOnline] = useState(navigator.onLine);
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
-  const drawerRef = useRef<HTMLElement>(null);
+  const selectedRoute = useMemo(
+    () => currentRoute(location.pathname),
+    [location.pathname],
+  );
+
   useEffect(() => setDrawer(false), [location.pathname]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -104,44 +90,25 @@ export function AppShell() {
           }
         })
         .catch((error: { status?: number }) => {
-          if (error.status && ![404, 503].includes(error.status))
+          if (error.status && ![404, 503].includes(error.status)) {
             resolvePendingRequest(pending.requestId);
+          }
         });
     }
   }, [online, queryClient]);
-  useLayoutEffect(() => {
-    const panel = drawerRef.current;
-    if (
-      !drawer ||
-      !panel ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      return;
-    const tween = gsap.fromTo(
-      panel,
-      { xPercent: -100 },
-      {
-        xPercent: 0,
-        duration: 0.22,
-        ease: "power2.out",
-        clearProps: "transform",
-      },
-    );
-    return () => {
-      tween.kill();
-    };
-  }, [drawer]);
+
   useQuery({
     queryKey: ["changes", revision],
     queryFn: async () => {
       const data = await api<{ changed: boolean; dataRevision: number }>(
         `/changes?sinceRevision=${revision}`,
       );
-      if (data.changed && revision > 0)
+      if (data.changed && revision > 0) {
         await queryClient.invalidateQueries({
-          predicate: (q) =>
-            q.queryKey[0] !== "changes" && q.queryKey[0] !== "auth",
+          predicate: (query) =>
+            query.queryKey[0] !== "changes" && query.queryKey[0] !== "auth",
         });
+      }
       setRevision(data.dataRevision);
       return data;
     },
@@ -149,162 +116,142 @@ export function AppShell() {
     refetchInterval: 3000,
     retry: false,
   });
+
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
-    const q = search.trim();
-    if (q) navigate(`/search?q=${encodeURIComponent(q)}`);
+    const query = search.trim();
+    if (query) navigate(`/search?q=${encodeURIComponent(query)}`);
   };
+
+  const menuItems = allNavigation.map((item) => ({
+    key: item.to,
+    icon: item.icon,
+    label: item.label,
+  }));
+
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-card lg:flex lg:flex-col">
-        <Link to="/" className="flex h-20 items-center gap-3 border-b px-5">
-          <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Boxes className="size-6" />
-          </div>
-          <div>
-            <p className="font-semibold leading-tight">Inventory Hub</p>
-            <p className="text-xs text-muted-foreground">物品与位置管理</p>
-          </div>
+    <div className="app-shell">
+      <aside className="desktop-sidebar">
+        <Link to="/" className="brand-link">
+          <span className="brand-mark"><CloudOutlined /></span>
+          <span className="brand-copy">
+            <strong>Inventory Hub</strong>
+            <small>物品与位置管理</small>
+          </span>
         </Link>
-        <nav
-          className="scrollbar-thin flex-1 overflow-y-auto p-3"
-          aria-label="主导航"
-        >
-          <p className="px-3 pb-2 pt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            工作区
-          </p>
-          {primary.map((item) => (
-            <NavItem key={item.to} item={item} />
-          ))}
-          <p className="px-3 pb-2 pt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            管理
-          </p>
-          {management.map((item) => (
-            <NavItem key={item.to} item={item} />
-          ))}
-        </nav>
-        <div className="border-t p-3">
-          <div className="flex items-center gap-3 rounded-md px-3 py-2">
-            <CircleUserRound className="size-8 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {auth.user?.username}
-              </p>
-              <p className="text-xs text-muted-foreground">本地管理员</p>
-            </div>
-          </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedRoute]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+          className="sidebar-menu"
+        />
+        <div className="sidebar-account">
+          <UserOutlined />
+          <span>
+            <strong>{auth.user?.username}</strong>
+            <small>本地管理员</small>
+          </span>
         </div>
       </aside>
-      <div className="min-w-0 lg:col-start-2">
+
+      <section className="app-workspace">
         {!online && (
-          <div className="sticky top-0 z-40 flex min-h-11 items-center justify-center gap-2 bg-amber-500 px-4 text-sm font-medium text-amber-950">
-            <CloudOff className="size-4" />
+          <div className="offline-banner">
             网络已断开，当前仅可查看已加载内容
           </div>
         )}
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-8">
+        <header className="app-header">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="mobile-menu-trigger"
             onClick={() => setDrawer(true)}
             aria-label="打开菜单"
           >
-            <Menu className="size-5" />
+            <MenuOutlined />
           </Button>
-          <form onSubmit={submitSearch} className="relative max-w-xl flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <form onSubmit={submitSearch} className="global-search">
             <Input
               id="global-search"
               name="global-search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              onChange={(event) => setSearch(event.target.value)}
+              prefix={<SearchOutlined />}
               placeholder="搜索名称、编号或标签"
               aria-label="全局搜索"
               autoComplete="off"
             />
           </form>
-          <Badge
-            variant={online ? "success" : "warning"}
-            className="hidden sm:inline-flex"
-          >
+          <Badge variant={online ? "success" : "warning"} className="online-state">
             {online ? "服务在线" : "离线"}
           </Badge>
+          <Switch
+            checked={theme === "dark"}
+            checkedChildren={<MoonOutlined />}
+            unCheckedChildren={<SunOutlined />}
+            onChange={toggleTheme}
+            aria-label={theme === "dark" ? "切换到明亮主题" : "切换到暗色主题"}
+          />
         </header>
-        <main className="mx-auto w-full max-w-[1500px] p-4 pb-28 lg:p-8 lg:pb-8">
+        <main className="app-content">
           <Outlet />
         </main>
-      </div>
-      <nav
-        className="safe-bottom fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card/95 px-1 pt-1 backdrop-blur lg:hidden"
-        aria-label="移动端主导航"
+      </section>
+
+      <TabBar
+        className="mobile-tabbar"
+        activeKey={selectedRoute}
+        onChange={(key) => navigate(key)}
+        safeArea
       >
-        {primary.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              to={item.to}
-              end={item.end}
-              key={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px]",
-                  isActive ? "text-primary" : "text-muted-foreground",
-                )
-              }
-            >
-              <Icon className="size-5" />
-              <span>{item.label === "连续录入" ? "录入" : item.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-      {drawer && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-950/45 lg:hidden"
-          onMouseDown={(e) => e.currentTarget === e.target && setDrawer(false)}
-        >
-          <aside
-            ref={drawerRef}
-            className="h-full w-[min(340px,88vw)] overflow-y-auto border-r bg-card p-4 shadow-raised"
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-                  <Boxes className="size-6" />
-                </div>
-                <strong>Inventory Hub</strong>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setDrawer(false)}
-                aria-label="关闭菜单"
-              >
-                <X className="size-5" />
-              </Button>
-            </div>
-            <nav aria-label="所有页面">
-              {[...primary, ...management].map((item) => (
-                <NavItem
-                  key={item.to}
-                  item={item}
-                  onClick={() => setDrawer(false)}
-                />
-              ))}
-            </nav>
-            <Button
-              variant="outline"
-              className="mt-6 w-full justify-between"
-              onClick={() => navigate("/settings/account")}
-            >
-              <span>{auth.user?.username}</span>
-              <ChevronRight className="size-4" />
-            </Button>
-          </aside>
+        {primary.map((item) => (
+          <TabBar.Item
+            key={item.to}
+            icon={item.icon}
+            title={item.mobileLabel ?? item.label}
+          />
+        ))}
+      </TabBar>
+
+      <Popup
+        visible={drawer}
+        position="left"
+        onMaskClick={() => setDrawer(false)}
+        onClose={() => setDrawer(false)}
+        bodyClassName="mobile-navigation"
+        bodyStyle={{ width: "min(340px, 88vw)", height: "100dvh" }}
+      >
+        <div className="mobile-navigation__header">
+          <span className="brand-mark"><CloudOutlined /></span>
+          <strong>Inventory Hub</strong>
+          <Switch
+            checked={theme === "dark"}
+            checkedChildren={<MoonOutlined />}
+            unCheckedChildren={<SunOutlined />}
+            onChange={toggleTheme}
+            aria-label="切换主题"
+          />
         </div>
-      )}
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedRoute]}
+          items={menuItems}
+          onClick={({ key }) => {
+            navigate(key);
+            setDrawer(false);
+          }}
+          className="mobile-navigation__menu"
+        />
+        <Button
+          variant="outline"
+          className="mobile-navigation__account"
+          onClick={() => navigate("/settings/account")}
+        >
+          <UserOutlined />
+          <span>{auth.user?.username}</span>
+        </Button>
+      </Popup>
     </div>
   );
 }

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
+import { Checkbox, Radio } from "antd";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
 import type { InventoryNode, NodeType } from "@/lib/types";
-import { Button, Field, Input, Label, Select, Textarea } from "./ui";
+import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
 import { ImageManager, type EditableImage } from "./ImageManager";
 
 const schema = z.object({
@@ -182,8 +183,15 @@ export function NodeForm({
             >
               <Select
                 id="categoryId"
+                name="categoryId"
+                value={form.watch("categoryId") || ""}
                 aria-invalid={!!form.formState.errors.categoryId}
-                {...form.register("categoryId")}
+                onChange={(event) =>
+                  form.setValue("categoryId", event.target.value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
               >
                 <option value="">选择分类</option>
                 {pageItems(categories.data).map((category) => (
@@ -219,25 +227,22 @@ export function NodeForm({
                 </p>
               ) : (
                 pageItems(tags.data).map((tag) => (
-                  <label key={tag.id} className="cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
-                      checked={selectedTags.includes(tag.id)}
-                      onChange={(event) =>
-                        form.setValue(
-                          "tagIds",
-                          event.target.checked
-                            ? [...selectedTags, tag.id]
-                            : selectedTags.filter((id) => id !== tag.id),
-                          { shouldDirty: true },
-                        )
-                      }
-                    />
-                    <span className="inline-flex min-h-9 items-center rounded-full border px-3 text-sm peer-checked:border-primary peer-checked:bg-accent peer-checked:text-accent-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring/30">
-                      {tag.name}
-                    </span>
-                  </label>
+                  <Checkbox
+                    key={tag.id}
+                    checked={selectedTags.includes(tag.id)}
+                    onChange={(event) =>
+                      form.setValue(
+                        "tagIds",
+                        event.target.checked
+                          ? [...selectedTags, tag.id]
+                          : selectedTags.filter((id) => id !== tag.id),
+                        { shouldDirty: true },
+                      )
+                    }
+                    className="app-tag-checkbox"
+                  >
+                    {tag.name}
+                  </Checkbox>
                 ))
               )}
             </div>
@@ -276,34 +281,29 @@ export function NodeForm({
           <p className="mt-1 text-sm text-muted-foreground">
             “仅建档”会放入系统暂存区；只有确认已经实际收纳时才选择位置。
           </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="flex min-h-14 cursor-pointer items-center gap-3 rounded-md border p-3 has-[:checked]:border-primary has-[:checked]:bg-accent">
-              <input
-                type="radio"
-                value="STAGE"
-                {...form.register("createMode")}
-              />
+          <Radio.Group
+            value={createMode}
+            onChange={(event) =>
+              form.setValue("createMode", event.target.value, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+            className="app-location-mode"
+          >
+            <Radio value="STAGE" className="app-location-mode__option">
               <span>
                 <span className="block text-sm font-medium">仅建档</span>
-                <span className="text-xs text-muted-foreground">
-                  放入暂存区
-                </span>
+                <span className="text-xs text-muted-foreground">放入暂存区</span>
               </span>
-            </label>
-            <label className="flex min-h-14 cursor-pointer items-center gap-3 rounded-md border p-3 has-[:checked]:border-primary has-[:checked]:bg-accent">
-              <input
-                type="radio"
-                value="PLACE"
-                {...form.register("createMode")}
-              />
+            </Radio>
+            <Radio value="PLACE" className="app-location-mode__option">
               <span>
                 <span className="block text-sm font-medium">保存并放入</span>
-                <span className="text-xs text-muted-foreground">
-                  记录实际收纳位置
-                </span>
+                <span className="text-xs text-muted-foreground">记录实际收纳位置</span>
               </span>
-            </label>
-          </div>
+            </Radio>
+          </Radio.Group>
           {createMode === "PLACE" && (
             <Field
               label="目标位置"
@@ -312,7 +312,17 @@ export function NodeForm({
               required
               className="mt-4"
             >
-              <Select id="targetId" {...form.register("targetId")}>
+              <Select
+                id="targetId"
+                name="targetId"
+                value={form.watch("targetId") || ""}
+                onChange={(event) =>
+                  form.setValue("targetId", event.target.value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              >
                 <option value="">选择合法位置</option>
                 {allowedLocations.map((node) => (
                   <option key={node.id} value={node.id}>

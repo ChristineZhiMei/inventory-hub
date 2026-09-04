@@ -7,7 +7,7 @@ import type { InventoryNode } from "@/lib/types";
 import { normalizeCode } from "@/lib/utils";
 import { NodeCard } from "@/components/NodeCard";
 import { PageHeader, QueryError } from "@/components/Page";
-import { EmptyState, Skeleton } from "@/components/ui";
+import { EmptyState, Skeleton } from "@/components/AntUi";
 
 export function SearchPage() {
   const [params] = useSearchParams();

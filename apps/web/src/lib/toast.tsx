@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 import { cn } from "./utils";
+import { Button } from "@/components/AntUi";
 
 type Tone = "success" | "error" | "info";
 type Toast = { id: string; title: string; description?: string; tone: Tone };
@@ -21,7 +22,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return <div key={item.id} className={cn("surface flex gap-3 p-4 shadow-raised", item.tone === "error" && "border-destructive/40")}>
       <Icon className={cn("mt-0.5 size-5 shrink-0", item.tone === "success" ? "text-emerald-600" : item.tone === "error" ? "text-destructive" : "text-primary")} />
       <div className="min-w-0 flex-1"><p className="font-medium">{item.title}</p>{item.description && <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>}</div>
-      <button className="size-11 -m-2 grid place-items-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none" onClick={() => remove(item.id)} aria-label="关闭通知"><X className="size-4" /></button>
+      <Button variant="ghost" size="icon" className="-m-2 text-muted-foreground" onClick={() => remove(item.id)} aria-label="关闭通知"><X className="size-4" /></Button>
     </div>;
   })}</div></ToastContext.Provider>;
 }

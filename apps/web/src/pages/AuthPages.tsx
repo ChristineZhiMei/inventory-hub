@@ -13,7 +13,7 @@ import {
   CardTitle,
   Field,
   Input,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 function AuthFrame({
   children,
@@ -24,8 +24,8 @@ function AuthFrame({
   description?: string;
 }) {
   return (
-    <main className="grid min-h-screen place-items-center p-4">
-      <div className="w-full max-w-md">
+    <main className="auth-shell">
+      <div className="auth-panel">
         <div className="mb-7 flex items-center justify-center gap-3">
           <div className="grid size-11 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Boxes className="size-6" />

@@ -19,7 +19,7 @@ import {
   EmptyState,
   Select,
   Skeleton,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 export function OperationsPage() {
   const [params, setParams] = useSearchParams();

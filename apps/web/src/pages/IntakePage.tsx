@@ -28,7 +28,7 @@ import {
   EmptyState,
   Segmented,
   Select,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 type Mode = "new" | "existing" | "batch";
 type Completed = { id: string; code: string; name: string; message: string };
@@ -413,9 +413,9 @@ export function IntakePage() {
                         <span className="min-w-0 flex-1 truncate text-sm">
                           {node.name}
                         </span>
-                        <button
-                          type="button"
-                          className="grid size-11 place-items-center rounded-md hover:bg-muted"
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() =>
                             setPending((current) =>
                               current.filter((item) => item.id !== node.id),
@@ -424,7 +424,7 @@ export function IntakePage() {
                           aria-label={`移除 ${node.name}`}
                         >
                           <Trash2 className="size-4" />
-                        </button>
+                        </Button>
                       </div>
                     ))}
                     <Button

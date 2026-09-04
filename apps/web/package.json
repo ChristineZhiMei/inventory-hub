@@ -11,13 +11,15 @@
     "clean": "rimraf dist .vite"
   },
   "dependencies": {
+    "@ant-design/icons": "6.1.0",
+    "@ant-design/v5-patch-for-react-19": "1.0.3",
     "@hookform/resolvers": "5.7.1",
     "@tanstack/react-query": "5.101.4",
     "@zxing/browser": "0.1.5",
     "@zxing/library": "0.21.3",
-    "class-variance-authority": "0.7.1",
+    "antd": "5.29.3",
+    "antd-mobile": "5.42.3",
     "clsx": "2.1.1",
-    "gsap": "3.14.2",
     "jsbarcode": "3.12.1",
     "lucide-react": "0.468.0",
     "react": "19.2.0",
@@ -28,13 +30,14 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@types/jsbarcode": "3.11.4",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@types/jsbarcode": "3.11.4",
     "@vitejs/plugin-react": "6.0.5",
     "autoprefixer": "10.5.4",
     "postcss": "8.5.6",
     "rimraf": "6.0.1",
+    "sass": "1.104.0",
     "tailwindcss": "3.4.17",
     "typescript": "5.9.3",
     "vite": "8.0.0"

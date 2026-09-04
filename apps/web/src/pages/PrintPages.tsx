@@ -27,7 +27,7 @@ import {
   Field,
   Input,
   Skeleton,
-} from "@/components/ui";
+} from "@/components/AntUi";
 
 const stateInfo: Record<
   PrintItemState,
