@@ -1,0 +1,31 @@
+{
+  "name": "inventory-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first inventory archive and location management application",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.9.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @inventory-hub/core --filter @inventory-hub/web dev",
+    "dev:core": "pnpm --filter @inventory-hub/core dev",
+    "dev:web": "pnpm --filter @inventory-hub/web dev",
+    "dev:desktop": "pnpm --filter @inventory-hub/desktop dev",
+    "dev:server": "pnpm --filter @inventory-hub/server dev",
+    "start:server": "pnpm --filter @inventory-hub/server start",
+    "build": "pnpm build:contracts && pnpm build:core && pnpm build:server && pnpm build:web && pnpm build:desktop",
+    "build:contracts": "pnpm --filter @inventory-hub/contracts build",
+    "build:core": "pnpm --filter @inventory-hub/core build",
+    "build:server": "pnpm --filter @inventory-hub/server build",
+    "build:web": "pnpm --filter @inventory-hub/web build",
+    "build:desktop": "pnpm --filter @inventory-hub/desktop build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "clean": "pnpm -r --if-present clean",
+    "package:mac:arm64": "pnpm build && pnpm --filter @inventory-hub/desktop package:mac:arm64",
+    "package:mac:x64": "pnpm build && pnpm --filter @inventory-hub/desktop package:mac:x64",
+    "package:win:x64": "pnpm build && pnpm --filter @inventory-hub/desktop package:win:x64"
+  }
+}

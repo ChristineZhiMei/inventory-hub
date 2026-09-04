@@ -1,0 +1,246 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Archive,
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  PackagePlus,
+  Search,
+  Square,
+} from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { pageItems, queries } from "@/lib/queries";
+import type { InventoryAction, InventoryNode } from "@/lib/types";
+import { InventoryActionDialog } from "@/components/InventoryActionDialog";
+import { NodeCard } from "@/components/NodeCard";
+import { QueryError } from "@/components/Page";
+import { Button, EmptyState, Input, Select, Skeleton } from "@/components/ui";
+
+export function ItemsPage() {
+  const [params, setParams] = useSearchParams();
+  const [selected, setSelected] = useState<InventoryNode[]>([]);
+  const [action, setAction] = useState<InventoryAction | null>(null);
+  const queryString = params.toString();
+  const request = new URLSearchParams(params);
+  request.set("limit", "30");
+  if (request.get("locationId")) request.set("includeDescendants", "true");
+  const query = useQuery({
+    queryKey: ["items", queryString],
+    queryFn: () => queries.items(request.toString()),
+  });
+  const categories = useQuery({
+    queryKey: ["categories"],
+    queryFn: queries.categories,
+  });
+  const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
+  const locations = useQuery({
+    queryKey: ["locations", "item-filter"],
+    queryFn: () => queries.locations("limit=100"),
+  });
+  const items = pageItems(query.data);
+  function setFilter(name: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(name, value);
+    else next.delete(name);
+    if (name !== "cursor") next.delete("cursor");
+    setParams(next, { replace: true });
+    setSelected([]);
+  }
+  function toggle(node: InventoryNode) {
+    setSelected((current) =>
+      current.some((item) => item.id === node.id)
+        ? current.filter((item) => item.id !== node.id)
+        : [...current, node],
+    );
+  }
+  return (
+    <div>
+      <div className="mb-3 flex justify-end">
+        <Link
+          to="/items/new"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <PackagePlus className="size-4" />
+          新建物品
+        </Link>
+      </div>
+      <div className="surface mb-5 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(140px,180px))_auto]">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            name="item-query"
+            value={params.get("q") || ""}
+            onChange={(event) => setFilter("q", event.target.value)}
+            placeholder="搜索名称、编号、分类或标签"
+            className="pl-9"
+            aria-label="搜索物品"
+          />
+        </div>
+        <Select
+          name="item-status"
+          value={params.get("status") || ""}
+          onChange={(event) => setFilter("status", event.target.value)}
+          aria-label="库存状态"
+        >
+          <option value="">全部状态</option>
+          <option value="IN_STOCK">在库</option>
+          <option value="OUT">已出库</option>
+          <option value="DISCARDED">已废弃</option>
+        </Select>
+        <Select
+          name="item-category"
+          value={params.get("categoryId") || ""}
+          onChange={(event) => setFilter("categoryId", event.target.value)}
+          aria-label="分类"
+        >
+          <option value="">全部分类</option>
+          {pageItems(categories.data).map((category) => (
+            <option value={category.id} key={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          name="item-tag"
+          value={params.get("tagIds") || ""}
+          onChange={(event) => setFilter("tagIds", event.target.value)}
+          aria-label="标签"
+        >
+          <option value="">全部标签</option>
+          {pageItems(tags.data).map((tag) => (
+            <option value={tag.id} key={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          name="item-location"
+          value={params.get("locationId") || ""}
+          onChange={(event) => setFilter("locationId", event.target.value)}
+          aria-label="所在位置"
+        >
+          <option value="">全部位置</option>
+          {pageItems(locations.data).map((location) => (
+            <option value={location.id} key={location.id}>
+              {location.name} · {location.code}
+            </option>
+          ))}
+        </Select>
+        <Button
+          variant="outline"
+          onClick={() =>
+            setSelected(selected.length === items.length ? [] : items)
+          }
+          disabled={!items.length}
+        >
+          {selected.length === items.length && items.length ? (
+            <CheckSquare className="size-4" />
+          ) : (
+            <Square className="size-4" />
+          )}
+          {selected.length ? `已选 ${selected.length}` : "批量选择"}
+        </Button>
+      </div>
+      {selected.length > 0 && (
+        <div className="sticky top-20 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 p-3 shadow-raised backdrop-blur">
+          <span className="mr-auto text-sm font-medium">
+            已选择 {selected.length} 件
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setAction("MOVE")}>
+            移动
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAction("REMOVE")}
+          >
+            移出
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAction("CHECK_OUT")}
+          >
+            出库
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAction("CHECK_IN")}
+          >
+            入库
+          </Button>
+        </div>
+      )}
+      {query.isLoading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} className="h-28" />
+          ))}
+        </div>
+      ) : query.isError ? (
+        <QueryError error={query.error} onRetry={() => query.refetch()} />
+      ) : items.length ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {items.map((node) => (
+            <NodeCard
+              key={node.id}
+              node={node}
+              selectable={selected.length > 0}
+              selected={selected.some((item) => item.id === node.id)}
+              onSelect={toggle}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={Archive}
+          title={queryString ? "没有匹配物品" : "还没有物品档案"}
+          description={
+            queryString
+              ? "调整搜索词或筛选条件后重试。"
+              : "拍摄第一件物品的照片，为它创建独立编号。"
+          }
+          action={
+            <Link
+              to="/items/new"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              新建第一件物品
+            </Link>
+          }
+        />
+      )}
+      {(params.get("cursor") || query.data?.nextCursor) && (
+        <div className="mt-5 flex justify-center gap-3">
+          <Button
+            variant="outline"
+            disabled={!params.get("cursor")}
+            onClick={() => setFilter("cursor", "")}
+          >
+            <ChevronLeft className="size-4" />
+            第一页
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!query.data?.nextCursor}
+            onClick={() => setFilter("cursor", query.data?.nextCursor || "")}
+          >
+            下一页
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      )}
+      <InventoryActionDialog
+        open={!!action}
+        action={action || "MOVE"}
+        nodes={selected}
+        onClose={() => {
+          setAction(null);
+          setSelected([]);
+        }}
+      />
+    </div>
+  );
+}

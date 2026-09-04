@@ -106,7 +106,8 @@ flowchart TB
 | 后端 | Node.js、Fastify、Drizzle ORM、better-sqlite3 | HTTP 适配器与业务解耦；单服务拥有 SQLite 连接，短事务同步执行 |
 | 图片 | Sharp | 隔离处理工作进程，限制内存与并发；显式 WebP 输出 |
 | 扫码/标签 | @zxing/browser、JsBarcode Code 128 | 浏览器实时识别与标签生成；不承担 USB 驱动功能 |
-| 桌面/发行 | Electron、Electron Forge、pnpm workspace | 主进程只管理系统能力，按 OS/架构构建 |
+| 桌面/发行 | Electron、electron-builder、pnpm workspace | 主进程只管理系统能力，按 OS/架构构建 |
+| 交互动效 | GSAP + CSS transition | GSAP 仅用于既有弹窗与移动抽屉；菜单切页不做位移动画，其余反馈使用简单 CSS 过渡并遵循 reduced-motion |
 | 服务部署 | 独立 Node + SQLite；可选 Docker Compose、Nginx | 单实例起步；不共享网络数据库文件，无需 Redis 或消息中间件 |
 
 上述是选型，不是依赖已安装声明。初始化时锁定受支持且互相兼容的确切版本，提交 lockfile；安装和发布不使用浮动 `latest`。Electron 自带 Node 与独立服务 Node 的兼容版本、better-sqlite3 和 Sharp 的平台二进制必须在 P0 最小安装包中确认；开发机能运行不能替代安装包验证。[Electron 原生模块说明](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules)
@@ -1014,7 +1015,7 @@ Session token 用32字节安全随机数，服务端只存 SHA-256；HttpOnly、
 
 手机实时摄像头必须在可信安全上下文中获得用户授权；普通 `http://192.168.x.x` 不等于 localhost 例外。桌面生成本地签发机构和含实际 IP/主机名的服务证书，手机只安装公开证书并核对指纹，不分发私钥；具体 OS 信任步骤与浏览器实测属于发布门禁。不能用忽略证书错误代替可用方案。[浏览器摄像头要求](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
 
-Electron 显式 `nodeIntegration=false、contextIsolation=true、sandbox=true`；preload 只暴露列出的本机能力，逐次校验 sender frame/URL。远程模式的业务窗口加载用户明确配置的服务器 HTTPS 页面，**不加载本机能力 preload**，页面/API同源，避免跨站 Cookie 与 CORS 混乱；本机设置放独立的打包可信窗口，打印由主进程设备令牌通道执行，远程页面不直接访问系统桥。CSP 禁任意脚本与非必要远程资源，外链只允许受控 HTTPS，阻止未知导航、弹窗和 shell 命令。[Electron 安全指南](https://www.electronjs.org/docs/latest/tutorial/security)
+Electron 显式 `nodeIntegration=false、contextIsolation=true、sandbox=true`；preload 只暴露列出的本机能力，逐次校验 sender frame/URL。远程模式的业务窗口加载用户明确配置的服务器 HTTPS 页面，不加载桌面模式的目录、文件或直接打印能力，只使用独立受限 preload 暴露执行器配对、状态、取消配对和打印机枚举；设备令牌由主进程通过 OS 凭证存储加密保存，领取与实际打印也只在主进程后台执行。页面/API同源，避免跨站 Cookie 与 CORS 混乱；CSP 禁任意脚本与非必要远程资源，外链只允许受控 HTTPS，阻止未知导航、弹窗和 shell 命令。[Electron 安全指南](https://www.electronjs.org/docs/latest/tutorial/security)
 
 ## 13. 桌面打包与服务器部署契约
 

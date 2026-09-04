@@ -1,0 +1,166 @@
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { homedir } from "node:os";
+import { parse } from "node:path";
+import { randomBytes } from "node:crypto";
+import { accessSync, constants, lstatSync, realpathSync, statfsSync } from "node:fs";
+import type { DesktopRuntimeConfig } from "./config";
+import { listPrinterSummaries, printLabel } from "./printing";
+import type { CoreServiceSupervisor } from "./service-supervisor";
+import type {
+  DesktopEnvironment,
+  ManagedPathKind,
+  MediaDirectoryValidation,
+  PrintLabelRequest,
+  PrinterSummary,
+  SelectedDirectory,
+} from "../shared/contracts";
+
+const SELECTION_LIFETIME_MS = 10 * 60 * 1_000;
+
+interface DirectoryGrant {
+  path: string;
+  senderId: number;
+  expiresAt: number;
+}
+
+export function registerDesktopIpc(options: {
+  getMainWindow: () => BrowserWindow | null;
+  config: DesktopRuntimeConfig;
+  service: CoreServiceSupervisor;
+}): () => void {
+  const { getMainWindow, config, service } = options;
+  const grants = new Map<string, DirectoryGrant>();
+  const channels: string[] = [];
+
+  const handle = <T extends unknown[]>(
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: T) => unknown,
+  ) => {
+    channels.push(channel);
+    ipcMain.handle(channel, (event, ...args: T) => {
+      assertTrustedSender(event, getMainWindow(), config.webUrl);
+      return listener(event, ...args);
+    });
+  };
+
+  handle("desktop:get-environment", (): DesktopEnvironment => ({
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    mode: config.mode,
+    serviceOrigin: config.serviceOrigin,
+    lanEnabled: config.lanEnabled,
+    ...(config.lanOrigin ? { lanOrigin: config.lanOrigin } : {}),
+    userDataPath: app.getPath("userData"),
+  }));
+  handle("desktop:get-service-status", () => service.status);
+
+  handle("desktop:select-media-directory", async (event): Promise<SelectedDirectory | null> => {
+    const window = getMainWindow();
+    if (!window) throw new Error("WINDOW_UNAVAILABLE");
+    const result = await dialog.showOpenDialog(window, {
+      title: "选择 Inventory Hub 图片存储目录",
+      buttonLabel: "选择此目录",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const selectedPath = result.filePaths[0];
+    if (result.canceled || !selectedPath) return null;
+    if (selectedPath === parse(selectedPath).root || selectedPath === homedir()) {
+      throw new Error("MEDIA_DIRECTORY_TOO_BROAD");
+    }
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = Date.now() + SELECTION_LIFETIME_MS;
+    grants.set(token, { path: selectedPath, senderId: event.sender.id, expiresAt });
+    service.registerMediaSelection({ token, path: selectedPath, expiresAt });
+    return { token, displayPath: selectedPath, expiresAt: new Date(expiresAt).toISOString() };
+  });
+
+  handle(
+    "desktop:validate-media-directory",
+    (event, selectionToken: string): MediaDirectoryValidation => {
+      if (typeof selectionToken !== "string" || selectionToken.length < 32 || selectionToken.length > 128) {
+        throw new Error("INVALID_SELECTION_TOKEN");
+      }
+      const path = getGrantedPath(grants, selectionToken, event.sender.id);
+      try {
+        const stats = lstatSync(path);
+        if (!stats.isDirectory()) return { valid: false, displayPath: path, reason: "INVALID_PATH" };
+        if (stats.isSymbolicLink() || realpathSync(path) !== path) {
+          return { valid: false, displayPath: path, reason: "SYMLINK_NOT_ALLOWED" };
+        }
+        accessSync(path, constants.R_OK | constants.W_OK | constants.X_OK);
+        const filesystem = statfsSync(path);
+        return {
+          valid: true,
+          displayPath: path,
+          freeBytes: filesystem.bavail * filesystem.bsize,
+        };
+      } catch {
+        return { valid: false, displayPath: path, reason: "NOT_WRITABLE" };
+      }
+    },
+  );
+
+  handle(
+    "desktop:open-managed-path",
+    async (event, kind: ManagedPathKind, selectionToken?: string): Promise<void> => {
+      const allowedKinds = new Set<ManagedPathKind>(["userData", "database", "logs", "selectedMedia"]);
+      if (!allowedKinds.has(kind)) throw new Error("INVALID_MANAGED_PATH_KIND");
+      let path: string;
+      if (kind === "selectedMedia") {
+        if (!selectionToken) throw new Error("SELECTION_TOKEN_REQUIRED");
+        path = getGrantedPath(grants, selectionToken, event.sender.id);
+      } else {
+        path = kind === "userData" ? config.dataDir : kind === "database" ? config.databaseDir : config.logDir;
+      }
+      const failure = await shell.openPath(path);
+      if (failure) throw new Error(`OPEN_PATH_FAILED: ${failure}`);
+    },
+  );
+
+  handle("desktop:list-printers", async (): Promise<PrinterSummary[]> => {
+    const window = getMainWindow();
+    if (!window) throw new Error("WINDOW_UNAVAILABLE");
+    return listPrinterSummaries(window);
+  });
+
+  handle("desktop:print-label", async (_event, request: PrintLabelRequest) => {
+    const window = getMainWindow();
+    if (!window) throw new Error("WINDOW_UNAVAILABLE");
+    return printLabel(window, request);
+  });
+
+  const unsubscribeStatus = service.onStatus((status) => {
+    const window = getMainWindow();
+    if (window && !window.isDestroyed()) window.webContents.send("desktop:service-status", status);
+  });
+
+  return () => {
+    unsubscribeStatus();
+    for (const channel of channels) ipcMain.removeHandler(channel);
+    grants.clear();
+  };
+}
+
+function assertTrustedSender(
+  event: IpcMainInvokeEvent,
+  window: BrowserWindow | null,
+  trustedPageUrl: string,
+): void {
+  if (!window || event.sender.id !== window.webContents.id || event.senderFrame !== event.sender.mainFrame) {
+    throw new Error("UNTRUSTED_IPC_SENDER");
+  }
+  const senderUrl = event.senderFrame?.url;
+  if (!senderUrl || new URL(senderUrl).origin !== new URL(trustedPageUrl).origin) {
+    throw new Error("UNTRUSTED_IPC_ORIGIN");
+  }
+}
+
+function getGrantedPath(grants: Map<string, DirectoryGrant>, token: string, senderId: number): string {
+  const grant = grants.get(token);
+  if (!grant || grant.senderId !== senderId || grant.expiresAt < Date.now()) {
+    grants.delete(token);
+    throw new Error("MEDIA_SELECTION_EXPIRED");
+  }
+  return grant.path;
+}

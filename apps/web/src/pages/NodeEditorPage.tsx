@@ -1,0 +1,133 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api, errorMessage } from "@/lib/api";
+import { queries } from "@/lib/queries";
+import type { NodeType } from "@/lib/types";
+import { NodeForm, type NodeFormData } from "@/components/NodeForm";
+import { PageHeader, QueryError } from "@/components/Page";
+import { Alert, Skeleton } from "@/components/ui";
+import type { EditableImage } from "@/components/ImageManager";
+
+export function NodeEditorPage({
+  mode,
+  forcedType,
+}: {
+  mode: "create" | "edit";
+  forcedType?: NodeType;
+}) {
+  const { id } = useParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const detail = useQuery({
+    queryKey: ["node", id],
+    queryFn: () => queries.node(id!),
+    enabled: mode === "edit" && !!id,
+  });
+  const type =
+    forcedType ||
+    (params.get("type") as NodeType | null) ||
+    detail.data?.type ||
+    "ITEM";
+  const mutation = useMutation({
+    mutationFn: async (values: NodeFormData & { images: EditableImage[] }) => {
+      if (mode === "create")
+        return api<{ id?: string; node?: { id: string } }>("/nodes", {
+          method: "POST",
+          idempotent: true,
+          body: {
+            type,
+            name: values.name,
+            notes: values.notes || undefined,
+            categoryId: type === "ITEM" ? values.categoryId : undefined,
+            specification:
+              type === "ITEM" ? values.specification || undefined : undefined,
+            tagIds: values.tagIds,
+            uploadIds: values.images
+              .map((image) => image.uploadId)
+              .filter(Boolean),
+            createMode: type === "WAREHOUSE" ? "STAGE" : values.createMode,
+            targetId:
+              values.createMode === "PLACE" ? values.targetId : undefined,
+            targetLocationToken:
+              values.createMode === "PLACE"
+                ? values.targetLocationToken
+                : undefined,
+          },
+        });
+      return api<{ id?: string; node?: { id: string } }>(`/nodes/${id}`, {
+        method: "PATCH",
+        idempotent: true,
+        body: {
+          expectedVersion: detail.data!.version,
+          name: values.name,
+          notes: values.notes || "",
+          categoryId: type === "ITEM" ? values.categoryId : undefined,
+          specification:
+            type === "ITEM" ? values.specification || "" : undefined,
+          tagIds: values.tagIds,
+          images: values.images.map((image) =>
+            image.imageId
+              ? { imageId: image.imageId }
+              : { uploadId: image.uploadId },
+          ),
+        },
+      });
+    },
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries();
+      const resultId = result.node?.id || result.id || id;
+      navigate(
+        type === "ITEM" ? `/items/${resultId}` : `/locations/${resultId}`,
+        { replace: true },
+      );
+    },
+  });
+  const typeName = {
+    ITEM: "物品",
+    BAG: "袋子",
+    BOX: "箱子",
+    WAREHOUSE: "仓库",
+  }[type];
+  if (mode === "edit" && detail.isLoading)
+    return (
+      <>
+        <PageHeader title="加载档案…" back />
+        <Skeleton className="h-96" />
+      </>
+    );
+  if (mode === "edit" && detail.isError)
+    return (
+      <>
+        <PageHeader title="档案编辑" back />
+        <QueryError error={detail.error} onRetry={() => detail.refetch()} />
+      </>
+    );
+  return (
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title={mode === "create" ? `新建${typeName}` : `编辑${typeName}`}
+        description={
+          mode === "create"
+            ? "保存后系统会分配唯一编号；编号不会因改名或移动而改变。"
+            : `${detail.data?.code} · 编号、类型、位置和状态不可在档案编辑中修改。`
+        }
+        back
+      />
+      {mutation.error && (
+        <Alert title="保存失败" tone="error" className="mb-4">
+          {errorMessage(mutation.error)}
+        </Alert>
+      )}
+      <NodeForm
+        type={type}
+        initial={detail.data}
+        onSubmit={(payload) =>
+          mutation.mutateAsync(payload).then(() => undefined)
+        }
+        busy={mutation.isPending}
+        submitLabel={mode === "create" ? `创建${typeName}` : "保存修改"}
+      />
+    </div>
+  );
+}

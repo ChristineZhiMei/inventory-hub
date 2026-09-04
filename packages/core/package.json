@@ -1,0 +1,37 @@
+{
+  "name": "@inventory-hub/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/standalone.ts",
+    "start": "node dist/standalone.js",
+    "init-admin": "node dist/init-admin.js"
+  },
+  "dependencies": {
+    "@inventory-hub/contracts": "workspace:*",
+    "better-sqlite3": "^12.2.0",
+    "bwip-js": "3.0.4",
+    "fastify": "^5.5.0",
+    "proper-lockfile": "4.1.2",
+    "sharp": "^0.34.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.3.0",
+    "@types/proper-lockfile": "4.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
