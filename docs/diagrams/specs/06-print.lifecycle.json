@@ -1,0 +1,27 @@
+{
+  "schema_version":1,"diagram_type":"lifecycle",
+  "meta":{"title":"06 · 打印任务状态","locale":"zh-CN","quality_profile":"showcase","viewBox":[1020,650]},
+  "lanes":[{"id":"main","label":"任务处理"},{"id":"retry","label":"异常处理"},{"id":"terminal","label":"确认与取消"}],
+  "states":[
+    {"id":"queued","type":"start","label":"待打印","sublabel":"任务已持久化","lane":"main","col":0},
+    {"id":"sending","type":"active","label":"提交中","sublabel":"打印执行器独占领取","lane":"main","col":2},
+    {"id":"submitted","type":"success","label":"已提交队列","sublabel":"不等于已实际出纸","lane":"main","col":4},
+    {"id":"failed","type":"failure","label":"明确失败","sublabel":"确认未被队列接受","lane":"retry","col":0},
+    {"id":"unknown","type":"waiting","label":"结果待确认","sublabel":"提交中断或结果丢失","lane":"retry","col":2},
+    {"id":"cancelled","type":"neutral","label":"已取消","sublabel":"只允许取消待打印任务","lane":"terminal","col":0}
+  ],
+  "transitions":[
+    {"id":"claim","from":"queued","to":"sending","label":"领取","route":"straight"},
+    {"id":"accept","from":"sending","to":"submitted","label":"队列接受","route":"straight"},
+    {"id":"reject","from":"sending","to":"failed","label":"明确拒绝","labelAt":[402,230]},
+    {"id":"retry","from":"failed","to":"sending","label":"人工重试","route":"left-channel"},
+    {"id":"uncertain","from":"sending","to":"unknown","label":"结果不明"},
+    {"id":"reconcile","from":"unknown","to":"submitted","label":"查证已提交"},
+    {"id":"cancel","from":"queued","to":"cancelled","label":"用户取消"}
+  ],
+  "cards":[
+    {"dot":"cyan","title":"跨端统一","items":["桌面和手机都提交业务打印任务","仅主进程拥有打印机访问能力"]},
+    {"dot":"amber","title":"避免重复打印","items":["结果不明禁止自动重发","仍无法查证时人工核对后另建任务"]},
+    {"dot":"rose","title":"硬件验收","items":["系统、纸张尺寸和 D35 驱动待验证","首版不把已提交当作实际打印完成"]}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version":2,"diagram_type":"workflow",
+  "meta":{"title":"05 · 连续扫码与批量移位","locale":"zh-CN","quality_profile":"showcase","legend":{"entries":{"backend":{"label":"业务逻辑"},"database":{"label":"事务数据"},"security":{"label":"业务校验"}}}},
+  "lanes":[{"id":"user","label":"桌面或手机"},{"id":"server","label":"统一业务服务"},{"id":"retry","label":"异常与修正","variant":"exception"}],
+  "mainPath":["target","scan","preview","confirm","transaction","result"],
+  "nodes":[
+    {"id":"target","lane":"user","col":0,"type":"frontend","label":"确定目标","sublabel":"操作与目标位置"},
+    {"id":"scan","lane":"user","col":1,"type":"frontend","label":"连续扫码","sublabel":"去重与实时校验"},
+    {"id":"preview","lane":"user","col":2,"type":"frontend","label":"待处理清单","sublabel":"计数与移除"},
+    {"id":"confirm","lane":"user","col":3,"type":"frontend","label":"确认批量操作","sublabel":"请求唯一标识"},
+    {"id":"transaction","lane":"server","col":4,"type":"database","label":"事务复核写入","sublabel":"版本、位置和日志"},
+    {"id":"result","lane":"server","col":5,"type":"backend","label":"返回处理结果","sublabel":"整批成功或回滚"},
+    {"id":"invalid","lane":"retry","col":1,"type":"security","label":"识别无效","sublabel":"未知码或类型错误"},
+    {"id":"conflict","lane":"retry","col":4,"type":"security","label":"冲突或失败","sublabel":"刷新后重新确认"}
+  ],
+  "edges":[
+    {"id":"select-scan","from":"target","to":"scan","label":"目标锁定","role":"main"},
+    {"id":"scan-preview","from":"scan","to":"preview","label":"有效码入清单","role":"main"},
+    {"id":"preview-confirm","from":"preview","to":"confirm","label":"完成扫描","role":"main"},
+    {"id":"confirm-transaction","from":"confirm","to":"transaction","label":"提交请求","role":"main"},
+    {"id":"transaction-result","from":"transaction","to":"result","label":"提交成功","role":"main"},
+    {"id":"scan-invalid","from":"scan","to":"invalid","label":"无效码","role":"error"},
+    {"id":"invalid-scan","from":"invalid","to":"scan","label":"继续扫描","role":"return"},
+    {"id":"transaction-conflict","from":"transaction","to":"conflict","label":"整批回滚","role":"error"},
+    {"id":"conflict-confirm","from":"conflict","to":"confirm","label":"刷新确认","role":"return"}
+  ],
+  "cards":[
+    {"dot":"cyan","title":"混装与唯一归属","items":["箱子可接收袋子和散放物品","拒绝循环、同层嵌套和祖孙重复选择"]},
+    {"dot":"emerald","title":"一致性","items":["预览不修改数据，确认后再次校验","重复请求返回原结果，不重复移位"]},
+    {"dot":"amber","title":"安全提示","items":["已在目标位置时不重复执行","网络结果不明先查询请求状态"]}
+  ]
+}

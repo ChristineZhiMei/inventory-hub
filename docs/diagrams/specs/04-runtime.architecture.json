@@ -1,0 +1,25 @@
+{
+  "schema_version":1,"diagram_type":"architecture",
+  "meta":{"title":"04 · 系统运行时架构","locale":"zh-CN","quality_profile":"showcase","viewBox":[1320,680]},
+  "components":[
+    {"id":"phone","type":"external","label":"手机浏览器","sublabel":"同一局域网 · 可信证书","pos":[35,65],"size":[200,76]},
+    {"id":"renderer","type":"frontend","label":"桌面渲染进程","sublabel":"React · 无 Node 权限","pos":[35,300],"size":[200,76]},
+    {"id":"service","type":"backend","label":"内置服务进程","sublabel":"Fastify · API / 静态资源","pos":[435,185],"size":[230,76]},
+    {"id":"storage","type":"database","label":"本机持久化数据","sublabel":"SQLite / 图片 / 清理任务","pos":[935,185],"size":[260,76]},
+    {"id":"main","type":"backend","label":"Electron 主进程","sublabel":"单实例 · 托盘 · 进程管理","pos":[435,470],"size":[230,76]},
+    {"id":"printer","type":"external","label":"系统打印队列 / D35","sublabel":"操作系统驱动需验证","pos":[935,470],"size":[260,76]}
+  ],
+  "connections":[
+    {"id":"lan-https","from":"phone","to":"service","label":"LAN HTTPS"},
+    {"id":"local-http","from":"renderer","to":"service","label":"本机同源 API"},
+    {"id":"service-storage","from":"service","to":"storage","label":"唯一读写进程"},
+    {"id":"main-service","from":"main","to":"service","label":"生命周期与任务 IPC"},
+    {"id":"render-main","from":"renderer","to":"main","label":"受限 preload 接口"},
+    {"id":"main-printer","from":"main","to":"printer","label":"提交 / 查询结果"}
+  ],
+  "cards":[
+    {"dot":"cyan","title":"启动顺序","items":["主进程启动服务，迁移成功才接收写入","前端与数据库不跨越服务直接访问"]},
+    {"dot":"amber","title":"访问条件","items":["主动开启 LAN；手机登录且信任证书","关闭窗口到托盘，退出则停止服务"]},
+    {"dot":"rose","title":"安全边界","items":["桌面页面不暴露任意文件或命令能力","只授权 API 端口，不暴露数据库"]}
+  ]
+}
