@@ -19,7 +19,7 @@ export function NodeCard({ node, selectable, selected, onSelect }: { node: Inven
   const content = <>
       <div className="flex h-32 items-stretch">
       <div className="grid w-28 shrink-0 place-items-center bg-muted sm:w-32">{image ? <img src={image.thumbUrl || image.url || imageUrl(image.id)} alt="" className="size-full object-cover" /> : <TypeIcon type={node.type} className="size-9 text-muted-foreground/60" />}</div>
-      <div className="flex min-w-0 flex-1 flex-col p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{node.name}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{node.code}</p></div><StatusBadge status={node.stockStatus} /></div><div className="mt-auto flex justify-end pt-3"><ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></div></div>
+      <div className="flex min-w-0 flex-1 flex-col p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{node.name}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{node.code}</p></div><div className="flex shrink-0 flex-col items-end gap-1.5"><Badge variant="outline"><TypeName type={node.type} /></Badge><StatusBadge status={node.stockStatus} /></div></div><div className="mt-auto flex justify-end pt-3"><ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></div></div>
     </div>
   </>;
   const cardClassName = cn("group w-full overflow-hidden text-left transition duration-normal hover:-translate-y-0.5 hover:shadow-raised", selected && "ring-2 ring-primary");

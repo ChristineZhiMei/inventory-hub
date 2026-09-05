@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image } from "antd";
+import { Image, Table } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -14,7 +14,7 @@ import {
   Trash2,
   Warehouse,
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage, imageUrl } from "@/lib/api";
 import {
   consumeLocalNativeQueue,
@@ -54,11 +54,10 @@ import {
 
 export function NodeDetailPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [recursive, setRecursive] = useState<"direct" | "recursive">(
-    "recursive",
-  );
+  const contentView = searchParams.get("view") === "list" ? "list" : "card";
   const [action, setAction] = useState<InventoryAction | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
@@ -71,8 +70,8 @@ export function NodeDetailPage() {
     enabled: !!id,
   });
   const contents = useQuery({
-    queryKey: ["contents", id, recursive],
-    queryFn: () => queries.contents(id!, recursive === "recursive"),
+    queryKey: ["contents", id, "direct"],
+    queryFn: () => queries.contents(id!, false),
     enabled: !!id && !!detail.data && detail.data.type !== "ITEM",
   });
   const operations = useQuery({
@@ -366,23 +365,20 @@ export function NodeDetailPage() {
                 <CardTitle>收纳内容</CardTitle>
                 <Segmented
                   className="node-contents-header__tabs"
-                  value={recursive}
-                  onChange={setRecursive}
+                  value={contentView}
+                  onChange={(value) => {
+                    const next = new URLSearchParams(searchParams);
+                    if (value === "list") next.set("view", "list");
+                    else next.delete("view");
+                    setSearchParams(next, { replace: true });
+                  }}
                   options={[
-                    { value: "direct", label: "直接" },
-                    { value: "recursive", label: "递归" },
+                    { value: "card", label: "卡片" },
+                    { value: "list", label: "列表" },
                   ]}
                 />
                 <p className="col-span-2 text-sm text-muted-foreground">
-                  直接{" "}
-                  {contents.data?.counts?.directItems ??
-                    node.directItemCount ??
-                    0}{" "}
-                  件物品 · 递归{" "}
-                  {contents.data?.counts?.recursiveItems ??
-                    node.recursiveItemCount ??
-                    0}{" "}
-                  件物品
+                  当前直接包含 {contentItems.length} 个档案；袋子或箱子里的内容请进入对应详情查看。
                 </p>
               </CardHeader>
               <CardContent>
@@ -393,21 +389,65 @@ export function NodeDetailPage() {
                     error={contents.error}
                     onRetry={() => contents.refetch()}
                   />
-                ) : contentItems.length ? (
+                ) : contentItems.length && contentView === "card" ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     {contentItems.map((child) => (
-                      <div
-                        key={child.id}
-                        style={{
-                          marginLeft:
-                            recursive === "recursive"
-                              ? Math.min(child.depth || 0, 3) * 10
-                              : 0,
-                        }}
-                      >
+                      <div key={child.id}>
                         <NodeCard node={child} />
                       </div>
                     ))}
+                  </div>
+                ) : contentItems.length ? (
+                  <div className="overflow-x-auto">
+                    <Table<InventoryNode>
+                      rowKey="id"
+                      pagination={false}
+                      dataSource={contentItems}
+                      scroll={{ x: 680 }}
+                      columns={[
+                        {
+                          title: "名称",
+                          dataIndex: "name",
+                          key: "name",
+                          ellipsis: true,
+                        },
+                        {
+                          title: "类型",
+                          key: "type",
+                          width: 90,
+                          render: (_, child) => (
+                            <Badge variant="outline"><TypeName type={child.type} /></Badge>
+                          ),
+                        },
+                        {
+                          title: "编号",
+                          dataIndex: "code",
+                          key: "code",
+                          width: 120,
+                          render: (code: string) => <span className="font-mono text-xs">{code}</span>,
+                        },
+                        {
+                          title: "状态",
+                          key: "status",
+                          width: 90,
+                          render: (_, child) => <StatusBadge status={child.stockStatus} />,
+                        },
+                        {
+                          title: "操作",
+                          key: "action",
+                          width: 100,
+                          fixed: "right",
+                          render: (_, child) => (
+                            <Link
+                              to={child.type === "ITEM" ? `/items/${child.id}` : `/locations/${child.id}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              查看详情
+                            </Link>
+                          ),
+                        },
+                      ]}
+                    />
                   </div>
                 ) : (
                   <EmptyState
