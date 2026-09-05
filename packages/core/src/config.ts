@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export type AppMode = "development" | "desktop" | "server";
@@ -59,7 +59,8 @@ export const loadConfig = (input: InventoryConfigInput = {}): InventoryConfig =>
   const tlsKeyPath = input.tlsKeyPath ?? process.env.IH_TLS_KEY_PATH ?? process.env.TLS_KEY_PATH;
   const lanOrigin = parseLanOrigin(input.lanOrigin ?? process.env.IH_LAN_ORIGIN);
   if (Boolean(tlsCertPath) !== Boolean(tlsKeyPath)) throw new Error("TLS 证书和私钥路径必须成对提供");
-  const sessionSecret = input.sessionSecret ?? process.env.IH_SESSION_SECRET ?? process.env.SESSION_SECRET ?? (appMode === "server" ? undefined : randomBytes(32).toString("hex"));
+  const configuredSessionSecret = input.sessionSecret ?? process.env.IH_SESSION_SECRET ?? process.env.SESSION_SECRET;
+  const sessionSecret = configuredSessionSecret ?? (appMode === "server" ? undefined : loadOrCreateLocalSessionSecret(dataDir));
   if (!sessionSecret || sessionSecret.length < 32) throw new Error("会话密钥必须至少包含 32 个字符");
   if (appMode === "server" && /^replace-/i.test(sessionSecret)) throw new Error("服务器模式必须设置真实的 IH_SESSION_SECRET，不能使用示例占位值");
   return {
@@ -83,6 +84,31 @@ export const loadConfig = (input: InventoryConfigInput = {}): InventoryConfig =>
     logLevel: parseLogLevel(input.logLevel ?? process.env.IH_LOG_LEVEL ?? process.env.LOG_LEVEL),
   };
 };
+
+function loadOrCreateLocalSessionSecret(dataDir: string): string {
+  const secretPath = resolve(dataDir, "session-secret");
+  const readSecret = (): string => {
+    const value = readFileSync(secretPath, "utf8").trim();
+    if (value.length < 32) throw new Error("本地会话密钥文件无效");
+    chmodSync(secretPath, 0o600);
+    return value;
+  };
+
+  try {
+    return readSecret();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  const generated = randomBytes(32).toString("hex");
+  try {
+    writeFileSync(secretPath, `${generated}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    return generated;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    return readSecret();
+  }
+}
 
 function parseLanOrigin(value: string | undefined): string | undefined {
   if (!value) return undefined;
