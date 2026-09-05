@@ -7,6 +7,9 @@ import { playScanSuccessSound, unlockScanSound } from "@/lib/scanSound";
 import { normalizeCode } from "@/lib/utils";
 import { Alert, Button, Input } from "./AntUi";
 
+const ENHANCED_SCAN_INTERVAL_MS = 220;
+const ENHANCED_SCAN_MAX_WIDTH = 1024;
+
 export function ScannerInput({ onCode, paused = false, label = "扫描或输入编号" }: { onCode: (code: string) => void | Promise<void>; paused?: boolean; label?: string }) {
   const [code, setCode] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
@@ -64,11 +67,32 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
       delayBetweenScanAttempts: 90,
       delayBetweenScanSuccess: 650,
     });
+    const enhancedReader = new BrowserMultiFormatReader(hints);
+    const enhancedCanvas = document.createElement("canvas");
+    let enhancedTimer: number | undefined;
+    let enhancedFrame = 0;
+    const scanEnhancedFrame = () => {
+      if (disposed || !videoRef.current) return;
+      try {
+        const ready = prepareEnhancedBarcodeFrame(
+          videoRef.current,
+          enhancedCanvas,
+          enhancedFrame++ % 2 === 1,
+        );
+        if (ready) deliver(enhancedReader.decodeFromCanvas(enhancedCanvas).getText());
+      } catch {
+        // The regular full-frame reader keeps running while enhanced attempts miss.
+      }
+      if (!disposed) {
+        enhancedTimer = window.setTimeout(scanEnhancedFrame, ENHANCED_SCAN_INTERVAL_MS);
+      }
+    };
     reader.decodeFromConstraints({
       video: {
         facingMode: { ideal: "environment" },
         width: { ideal: 1920 },
         height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
       },
       audio: false,
     }, videoRef.current, (result) => {
@@ -85,6 +109,8 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
       if (!track) return;
       const capabilities = (typeof track.getCapabilities === "function" ? track.getCapabilities() : {}) as MediaTrackCapabilities & {
         focusMode?: string[];
+        exposureMode?: string[];
+        whiteBalanceMode?: string[];
         torch?: boolean;
         zoom?: { min: number; max: number; step?: number };
       };
@@ -98,20 +124,37 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
           step: capabilities.zoom.step || 0.1,
         });
       }
-      if (capabilities.focusMode?.includes("continuous")) {
+      const continuousModes = [
+        capabilities.focusMode?.includes("continuous")
+          ? { focusMode: "continuous" }
+          : null,
+        capabilities.exposureMode?.includes("continuous")
+          ? { exposureMode: "continuous" }
+          : null,
+        capabilities.whiteBalanceMode?.includes("continuous")
+          ? { whiteBalanceMode: "continuous" }
+          : null,
+      ].filter(Boolean);
+      for (const constraint of continuousModes) {
         try {
           await track.applyConstraints({
-            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+            advanced: [constraint as MediaTrackConstraintSet],
           });
         } catch {
-          // Some mobile browsers report focus modes but reject manual constraints.
+          // Some mobile browsers report a mode but reject manual constraints.
         }
       }
+      enhancedTimer = window.setTimeout(scanEnhancedFrame, ENHANCED_SCAN_INTERVAL_MS);
     }).catch((error: unknown) => {
       setCameraError(error instanceof DOMException && error.name === "NotAllowedError" ? "摄像头权限被拒绝，请在浏览器设置中允许或使用手动输入。" : "摄像头无法启动，可能正被其他应用占用。");
       setCameraOn(false);
     });
-    return () => { disposed = true; controlsRef.current?.stop(); controlsRef.current = null; };
+    return () => {
+      disposed = true;
+      if (enhancedTimer !== undefined) window.clearTimeout(enhancedTimer);
+      controlsRef.current?.stop();
+      controlsRef.current = null;
+    };
   }, [cameraOn, paused]);
   useEffect(() => {
     const visibility = () => { if (document.hidden) stopCamera(); };
@@ -122,4 +165,103 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
     {mobile && <div>{cameraOn ? <div className="overflow-hidden rounded-lg bg-black"><div className="relative"><video ref={videoRef} muted playsInline autoPlay className="aspect-[4/3] w-full object-cover" /><div className="pointer-events-none absolute inset-x-[7%] inset-y-[28%] rounded-lg border-2 border-white/90 shadow-[0_0_0_999px_rgb(0_0_0/.28)]"><span className="absolute inset-x-3 top-1/2 h-px -translate-y-1/2 bg-red-400/90" /></div><p className="pointer-events-none absolute inset-x-3 top-3 text-center text-xs font-medium text-white drop-shadow">横向放置条码，保持画面清晰稳定</p></div><div className="flex flex-wrap items-center gap-2 bg-black/95 p-3">{torchAvailable && <Button type="button" variant={torchOn ? "default" : "secondary"} size="sm" onClick={() => { const next = !torchOn; void controlsRef.current?.switchTorch?.(next).then(() => setTorchOn(next)).catch(() => setCameraError("当前设备无法切换补光灯。")); }}><Flashlight className="size-4" />{torchOn ? "关闭补光灯" : "开启补光灯"}</Button>}{zoomRange && <label className="flex min-w-36 flex-1 items-center gap-2 text-xs text-white"><span>缩放</span><input type="range" min={zoomRange.min} max={zoomRange.max} step={zoomRange.step} value={zoom} className="min-w-0 flex-1 accent-blue-500" onChange={(event) => { const next = Number(event.target.value); setZoom(next); void videoTrackRef.current?.applyConstraints({ advanced: [{ zoom: next } as MediaTrackConstraintSet] }).catch(() => setCameraError("当前设备无法调整摄像头缩放。")); }} /></label>}<Button type="button" variant="secondary" size="sm" className="ml-auto" onClick={stopCamera}><CameraOff className="size-4" />暂停</Button></div></div> : <Button type="button" variant="outline" className="w-full" onClick={startCamera} disabled={paused}><Camera className="size-4" />开启后置摄像头连续扫码</Button>}</div>}
     {cameraError && <Alert title="扫码不可用" tone="warning">{cameraError}</Alert>}
   </div>;
+}
+
+function prepareEnhancedBarcodeFrame(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  thresholded: boolean,
+): boolean {
+  if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+    return false;
+  }
+
+  const sourceWidth = Math.round(video.videoWidth * 0.94);
+  const sourceHeight = Math.round(video.videoHeight * 0.58);
+  const sourceX = Math.round((video.videoWidth - sourceWidth) / 2);
+  const sourceY = Math.round((video.videoHeight - sourceHeight) / 2);
+  const outputWidth = Math.min(sourceWidth, ENHANCED_SCAN_MAX_WIDTH);
+  const outputHeight = Math.max(1, Math.round(sourceHeight * (outputWidth / sourceWidth)));
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return false;
+  context.drawImage(
+    video,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    outputWidth,
+    outputHeight,
+  );
+
+  const frame = context.getImageData(0, 0, outputWidth, outputHeight);
+  const histogram = new Uint32Array(256);
+  for (let index = 0; index < frame.data.length; index += 16) {
+    histogram[luminance(frame.data, index)] += 1;
+  }
+  const low = histogramPercentile(histogram, 0.03);
+  const high = histogramPercentile(histogram, 0.97);
+  const contrastRange = Math.max(24, high - low);
+  const threshold = otsuThreshold(histogram);
+
+  for (let index = 0; index < frame.data.length; index += 4) {
+    const gray = luminance(frame.data, index);
+    const normalized = Math.max(0, Math.min(255, ((gray - low) * 255) / contrastRange));
+    const output = thresholded
+      ? gray <= threshold ? 0 : 255
+      : Math.max(0, Math.min(255, (normalized - 128) * 1.35 + 128));
+    frame.data[index] = output;
+    frame.data[index + 1] = output;
+    frame.data[index + 2] = output;
+  }
+  context.putImageData(frame, 0, 0);
+  return true;
+}
+
+function luminance(data: Uint8ClampedArray, index: number): number {
+  return Math.round(data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114);
+}
+
+function histogramPercentile(histogram: Uint32Array, percentile: number): number {
+  const total = histogram.reduce((sum, count) => sum + count, 0);
+  const target = total * percentile;
+  let accumulated = 0;
+  for (let value = 0; value < histogram.length; value += 1) {
+    accumulated += histogram[value];
+    if (accumulated >= target) return value;
+  }
+  return 255;
+}
+
+function otsuThreshold(histogram: Uint32Array): number {
+  const total = histogram.reduce((sum, count) => sum + count, 0);
+  let weightedTotal = 0;
+  for (let value = 0; value < histogram.length; value += 1) {
+    weightedTotal += value * histogram[value];
+  }
+
+  let backgroundWeight = 0;
+  let backgroundTotal = 0;
+  let bestVariance = -1;
+  let bestThreshold = 127;
+  for (let value = 0; value < histogram.length; value += 1) {
+    backgroundWeight += histogram[value];
+    if (!backgroundWeight) continue;
+    const foregroundWeight = total - backgroundWeight;
+    if (!foregroundWeight) break;
+    backgroundTotal += value * histogram[value];
+    const backgroundMean = backgroundTotal / backgroundWeight;
+    const foregroundMean = (weightedTotal - backgroundTotal) / foregroundWeight;
+    const variance = backgroundWeight * foregroundWeight * (backgroundMean - foregroundMean) ** 2;
+    if (variance > bestVariance) {
+      bestVariance = variance;
+      bestThreshold = value;
+    }
+  }
+  return bestThreshold;
 }
