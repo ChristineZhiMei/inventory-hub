@@ -6,6 +6,7 @@ import type { PrinterSummary, PrintLabelRequest, PrintLabelResult } from "../sha
 
 const CODE_PATTERN = /^(W|C|I)[0-9]{6,}$/;
 const NODE_TYPES = new Set(["WAREHOUSE", "BOX", "BAG", "ITEM"]);
+const CSS_PIXELS_PER_MM = 96 / 25.4;
 
 export async function printLabel(
   ownerWindow: BrowserWindow,
@@ -37,6 +38,21 @@ export async function printLabel(
 
   try {
     await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    // Chromium's macOS print compositor can omit CJK glyphs even when the same
+    // page renders them on screen. Rasterize the fully rendered label first so
+    // the system print job receives exactly the pixels shown in the preview.
+    const renderedLabel = await printWindow.webContents.capturePage({
+      x: 0,
+      y: 0,
+      width: Math.round(request.paper.widthMm * CSS_PIXELS_PER_MM),
+      height: Math.round(request.paper.heightMm * CSS_PIXELS_PER_MM),
+    });
+    if (renderedLabel.isEmpty()) {
+      return { acceptedBySystem: false, message: "LABEL_RENDER_FAILED" };
+    }
+    await printWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(renderRasterLabelHtml(request.paper, renderedLabel.toDataURL()))}`,
+    );
     return await new Promise<PrintLabelResult>((resolveResult) => {
       printWindow.webContents.print(
         {
@@ -66,6 +82,18 @@ export async function printLabel(
   } finally {
     if (!printWindow.isDestroyed()) printWindow.destroy();
   }
+}
+
+function renderRasterLabelHtml(
+  paper: PrintLabelRequest["paper"],
+  imageSource: string,
+): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+@page { size: ${paper.widthMm}mm ${paper.heightMm}mm; margin: 0; }
+* { box-sizing: border-box; }
+html, body { width: ${paper.widthMm}mm; height: ${paper.heightMm}mm; margin: 0; overflow: hidden; }
+img { display: block; width: 100%; height: 100%; object-fit: fill; }
+</style></head><body><img alt="" src="${imageSource}"></body></html>`;
 }
 
 export async function listPrinterSummaries(ownerWindow: BrowserWindow): Promise<PrinterSummary[]> {

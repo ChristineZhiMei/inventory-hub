@@ -31,11 +31,11 @@ export function renderLabelHtml(label: { code: string; name?: string | undefined
 @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { width: ${widthMm}mm; height: ${heightMm}mm; margin: 0; overflow: hidden; }
-body { color: #000; background: #fff; font-family: Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+body { color: #000; background: #fff; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif; }
 main { width: 100%; height: 100%; padding: ${marginMm}mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; }
 img { display: block; width: 100%; height: 10mm; object-fit: fill; flex-shrink: 0; }
 .code { max-width: 100%; white-space: nowrap; font: 700 10pt 'Courier New', monospace; }
-.name { max-width: 100%; font-size: 9pt; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.name { max-width: 100%; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; font-size: 9pt; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style></head><body><main>
 <img alt="${escapeHtml(label.code)}" src="${escapeHtml(barcodeSource)}">
 <div class="code">${escapeHtml(label.code)}</div>
