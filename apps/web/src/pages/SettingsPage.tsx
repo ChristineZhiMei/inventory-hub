@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { QRCode } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CircleUserRound,
   Clock3,
+  Copy,
   Database,
   ExternalLink,
   HardDrive,
@@ -411,7 +413,7 @@ function StorageSettings() {
 }
 
 function LanSettings() {
-  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
   const capabilities = useQuery({
     queryKey: ["capabilities"],
     queryFn: queries.capabilities,
@@ -420,10 +422,10 @@ function LanSettings() {
     queryKey: ["runtime-status"],
     queryFn: queries.runtime,
   });
-  const desktopStatus = useQuery({
-    queryKey: ["desktop-service-status"],
-    queryFn: () => window.inventoryHub!.getServiceStatus!(),
-    enabled: !!window.inventoryHub?.getServiceStatus,
+  const desktopEnvironment = useQuery({
+    queryKey: ["desktop-environment"],
+    queryFn: () => window.inventoryHub!.getEnvironment!(),
+    enabled: !!window.inventoryHub?.getEnvironment,
     retry: false,
   });
   const mutation = useMutation({
@@ -431,8 +433,6 @@ function LanSettings() {
       window.inventoryHub?.setLanEnabled
         ? window.inventoryHub.setLanEnabled(enabled)
         : Promise.reject(new Error("当前页面没有桌面配置权限")),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: ["capabilities"] }),
   });
   if (capabilities.isError)
     return (
@@ -442,22 +442,31 @@ function LanSettings() {
       />
     );
   const data = capabilities.data;
-  const service =
-    desktopStatus.data || runtime.data || data?.lan || data?.service || {};
-  const protocol = service.protocol || location.protocol.replace(":", "");
-  const host = service.host || location.hostname;
-  const port =
-    service.port || Number(location.port || (protocol === "https" ? 443 : 80));
+  const desktop = desktopEnvironment.data;
+  const service = runtime.data || data?.lan || data?.service || {};
   const lanEnabled =
-    "enabled" in service
+    desktop?.lanEnabled ?? ("enabled" in service
       ? !!service.enabled
       : "lanEnabled" in service
         ? !!service.lanEnabled
-        : !!data?.lan?.enabled;
-  const trusted =
-    window.isSecureContext &&
-    protocol === "https" &&
-    (data?.lan?.certificateTrusted ?? true);
+        : !!data?.lan?.enabled);
+  const lanOrigin = desktop?.lanOrigin || data?.lan?.url || service.url;
+  const lanUrl = lanOrigin ? new URL(lanOrigin) : null;
+  const protocol = lanUrl?.protocol.replace(":", "") || service.protocol || location.protocol.replace(":", "");
+  const host = lanUrl?.hostname || service.host || location.hostname;
+  const port = Number(lanUrl?.port || service.port || location.port || (protocol === "https" ? 443 : 80));
+  const certificateInstallUrl = desktop?.certificateInstallUrl;
+  const httpsReady = lanEnabled && protocol === "https" && Boolean(lanOrigin);
+  const copyInstallUrl = async () => {
+    if (!certificateInstallUrl) return;
+    try {
+      await navigator.clipboard.writeText(certificateInstallUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_500);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <div className="space-y-6">
       <Card>
@@ -472,8 +481,8 @@ function LanSettings() {
             <Badge variant={lanEnabled ? "success" : "secondary"}>
               {lanEnabled ? "已开启" : "未开启"}
             </Badge>
-            <Badge variant={trusted ? "success" : "warning"}>
-              {trusted ? "可信 HTTPS" : "非可信上下文"}
+            <Badge variant={httpsReady ? "success" : "warning"}>
+              {httpsReady ? "HTTPS 已配置" : "等待配置 HTTPS"}
             </Badge>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
@@ -482,21 +491,21 @@ function LanSettings() {
             <InfoBox label="服务端口" value={String(port)} />
             <InfoBox
               label="相机安全上下文"
-              value={window.isSecureContext ? "可申请权限" : "不可用"}
+              value={httpsReady ? "HTTPS 可申请" : "不可用"}
             />
           </dl>
-          {service.url && (
+          {lanOrigin && (
             <a
-              href={service.url}
+              href={lanOrigin}
               className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary hover:underline"
               target="_blank"
               rel="noreferrer"
             >
-              {service.url}
+              {lanOrigin}
               <ExternalLink className="size-4" />
             </a>
           )}
-          {!trusted && (
+          {!httpsReady && (
             <Alert
               title="手机实时扫码需要可信 HTTPS"
               tone="warning"
@@ -508,6 +517,46 @@ function LanSettings() {
           )}
         </CardContent>
       </Card>
+      {lanEnabled && certificateInstallUrl && (
+        <Card>
+          <CardHeader>
+            <CardTitle>手机安装证书</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-5 md:grid-cols-[184px_minmax(0,1fr)] md:items-start">
+              <div className="w-fit rounded-xl bg-white p-3">
+                <QRCode value={certificateInstallUrl} size={160} bordered={false} />
+              </div>
+              <div className="min-w-0 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  手机连接同一局域网后扫描二维码，或在手机浏览器输入下方网址。
+                </p>
+                <Field label="证书安装网址">
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                    <Input value={certificateInstallUrl} readOnly className="min-w-0 flex-1" />
+                    <Button variant="outline" onClick={() => void copyInstallUrl()}>
+                      <Copy className="size-4" />
+                      {copied ? "已复制" : "复制"}
+                    </Button>
+                  </div>
+                </Field>
+                {desktop?.caFingerprint && (
+                  <div>
+                    <p className="mb-1 text-sm font-medium">SHA-256 指纹</p>
+                    <code className="block rounded-md bg-muted p-3 text-xs leading-5 [overflow-wrap:anywhere]">
+                      {desktop.caFingerprint}
+                    </code>
+                  </div>
+                )}
+                <Alert title="安装后仍需确认信任" tone="info">
+                  iPhone 或 iPad 安装描述文件后，还需在“设置 → 通用 → 关于本机 →
+                  证书信任设置”中开启完全信任。Android 的入口因系统厂商而异。
+                </Alert>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>服务控制</CardTitle>
@@ -520,20 +569,20 @@ function LanSettings() {
                 disabled={lanEnabled}
                 loading={mutation.isPending}
               >
-                开启 LAN
+                开启局域网访问
               </Button>
               <Button
                 variant="outline"
                 onClick={() => mutation.mutate(false)}
                 disabled={!lanEnabled || mutation.isPending}
               >
-                关闭 LAN
+                关闭局域网访问
               </Button>
             </div>
           ) : (
             <Alert title="当前页面只能查看状态" tone="info">
               请在电脑上的桌面软件设置
-              LAN。更改监听地址、证书或端口后可能需要重启内置服务；本页不会伪装开关已经生效。
+              LAN。局域网开关和证书生成只能由桌面程序执行。
             </Alert>
           )}
           {mutation.error && (

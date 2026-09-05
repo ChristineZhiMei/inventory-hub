@@ -2,12 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } f
 import { homedir } from "node:os";
 import { parse } from "node:path";
 import { randomBytes } from "node:crypto";
+import { createServer } from "node:net";
 import { accessSync, constants, lstatSync, realpathSync, statfsSync } from "node:fs";
-import type { DesktopRuntimeConfig } from "./config";
+import type { DesktopConfigStore, DesktopRuntimeConfig } from "./config";
 import { listPrinterSummaries, printLabel } from "./printing";
 import type { CoreServiceSupervisor } from "./service-supervisor";
 import type {
   DesktopEnvironment,
+  LanConfigurationResult,
   ManagedPathKind,
   MediaDirectoryValidation,
   PrintLabelRequest,
@@ -26,9 +28,10 @@ interface DirectoryGrant {
 export function registerDesktopIpc(options: {
   getMainWindow: () => BrowserWindow | null;
   config: DesktopRuntimeConfig;
+  configStore: DesktopConfigStore;
   service: CoreServiceSupervisor;
 }): () => void {
-  const { getMainWindow, config, service } = options;
+  const { getMainWindow, config, configStore, service } = options;
   const grants = new Map<string, DirectoryGrant>();
   const channels: string[] = [];
 
@@ -51,9 +54,26 @@ export function registerDesktopIpc(options: {
     serviceOrigin: config.serviceOrigin,
     lanEnabled: config.lanEnabled,
     ...(config.lanOrigin ? { lanOrigin: config.lanOrigin } : {}),
+    ...(config.certificateInstallUrl ? { certificateInstallUrl: config.certificateInstallUrl } : {}),
+    ...(config.caFingerprint ? { caFingerprint: config.caFingerprint } : {}),
+    ...(config.lanAddresses ? { lanAddresses: config.lanAddresses } : {}),
     userDataPath: app.getPath("userData"),
   }));
   handle("desktop:get-service-status", () => service.status);
+  handle("desktop:set-lan-enabled", async (_event, enabled: boolean): Promise<LanConfigurationResult> => {
+    if (typeof enabled !== "boolean") throw new Error("INVALID_LAN_ENABLED_VALUE");
+    if (enabled && !config.lanEnabled) {
+      const ports = configStore.getLanPorts();
+      await assertPortAvailable("0.0.0.0", ports.certificate);
+      await assertPortAvailable("0.0.0.0", ports.https);
+    }
+    configStore.setLanEnabled(enabled);
+    setTimeout(() => {
+      app.relaunch();
+      app.quit();
+    }, 500);
+    return { enabled, restartScheduled: true };
+  });
 
   handle("desktop:select-media-directory", async (event): Promise<SelectedDirectory | null> => {
     const window = getMainWindow();
@@ -163,4 +183,17 @@ function getGrantedPath(grants: Map<string, DirectoryGrant>, token: string, send
     throw new Error("MEDIA_SELECTION_EXPIRED");
   }
   return grant.path;
+}
+
+function assertPortAvailable(host: string, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      reject(new Error(error.code === "EADDRINUSE" ? `LAN_PORT_IN_USE: ${port}` : `LAN_PORT_CHECK_FAILED: ${port}`));
+    });
+    server.listen({ host, port, exclusive: true }, () => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+  });
 }

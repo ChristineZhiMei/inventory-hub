@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { DesktopConfigStore, type DesktopRuntimeConfig } from "./config";
 import { registerDesktopIpc } from "./ipc";
+import { LanCertificatePortal, LanHttpsGateway } from "./lan-gateway";
 import { SafeStorageRemoteCredentialStore } from "./remote-credential-store";
 import { registerRemotePrintIpc } from "./remote-ipc";
 import { RemotePrintExecutor } from "./remote-print-executor";
@@ -23,6 +24,8 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let config: DesktopRuntimeConfig | null = null;
 let coreService: CoreServiceSupervisor | null = null;
+let lanGateway: LanHttpsGateway | null = null;
+let certificatePortal: LanCertificatePortal | null = null;
 let remotePrintExecutor: RemotePrintExecutor | null = null;
 let unregisterIpc: (() => void) | null = null;
 let restartInProgress = false;
@@ -72,12 +75,12 @@ function registerApplicationEvents(): void {
 
   app.on("before-quit", (event) => {
     quitRequested = true;
-    if (cleanupComplete || (!coreService && !remotePrintExecutor)) return;
+    if (cleanupComplete || (!coreService && !remotePrintExecutor && !lanGateway && !certificatePortal)) return;
     event.preventDefault();
     if (cleanupInProgress) return;
     cleanupInProgress = true;
     const forcedExit = setTimeout(() => process.exit(1), 15_000);
-    const cleanupTasks = [coreService?.stop(), remotePrintExecutor?.stop()].filter(
+    const cleanupTasks = [coreService?.stop(), remotePrintExecutor?.stop(), lanGateway?.stop(), certificatePortal?.stop()].filter(
       (task): task is Promise<void> => Boolean(task),
     );
     void Promise.allSettled(cleanupTasks).then((results) => {
@@ -106,7 +109,33 @@ async function bootstrap(): Promise<void> {
 
   coreService = new CoreServiceSupervisor(config);
   coreService.onUnexpectedExit(() => scheduleServiceRestart());
-  if (config.mode === "desktop") await coreService.start();
+  if (config.mode === "desktop") {
+    await coreService.start();
+    if (config.lanEnabled) {
+      if (!config.lanOrigin || !config.tlsCertPath || !config.tlsKeyPath) {
+        throw new Error("LAN_HTTPS_CONFIGURATION_INCOMPLETE");
+      }
+      lanGateway = new LanHttpsGateway({
+        bindHost: config.bindHost,
+        lanOrigin: config.lanOrigin,
+        serviceOrigin: config.serviceOrigin,
+        webOrigin: config.webUrl,
+        tlsCertPath: config.tlsCertPath,
+        tlsKeyPath: config.tlsKeyPath,
+      });
+      await lanGateway.start();
+      if (config.certificateInstallUrl && config.caCertPath && config.caFingerprint) {
+        certificatePortal = new LanCertificatePortal({
+          bindHost: config.bindHost,
+          installOrigin: new URL(config.certificateInstallUrl).origin,
+          appOrigin: config.lanOrigin,
+          caCertPath: config.caCertPath,
+          caFingerprint: config.caFingerprint,
+        });
+        await certificatePortal.start();
+      }
+    }
+  }
 
   configureSessionSecurity(session.defaultSession, config.webUrl);
   mainWindow = createMainWindow(config);
@@ -126,6 +155,7 @@ async function bootstrap(): Promise<void> {
     unregisterIpc = registerDesktopIpc({
       getMainWindow: () => mainWindow,
       config,
+      configStore: store,
       service: coreService,
     });
   }

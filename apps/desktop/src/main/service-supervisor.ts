@@ -43,7 +43,7 @@ export class CoreServiceSupervisor {
     if (this.child) return;
 
     this.updateStatus(attempt > 1 ? "restarting" : "starting", attempt);
-    await assertPortAvailable(this.config.bindHost, this.config.servicePort);
+    await assertPortAvailable("127.0.0.1", this.config.servicePort);
     const entry = this.resolveServiceEntry();
     this.expectedStop = false;
 
@@ -59,18 +59,17 @@ export class CoreServiceSupervisor {
         DATABASE_PATH: join(this.config.databaseDir, "inventory.sqlite"),
         MEDIA_ROOT: this.config.mediaDir,
         PORT: String(this.config.servicePort),
-        IH_HOST: this.config.bindHost,
+        IH_HOST: "127.0.0.1",
         IH_PORT: String(this.config.servicePort),
         IH_DATA_DIR: this.config.dataDir,
         IH_MEDIA_ROOT: this.config.mediaDir,
         IH_WEB_DIST_PATH: this.config.webDistPath,
         IH_LAN_ENABLED: String(this.config.lanEnabled),
-        ...(this.config.tlsCertPath
-          ? { IH_TLS_CERT_PATH: this.config.tlsCertPath, TLS_CERT_PATH: this.config.tlsCertPath }
-          : {}),
-        ...(this.config.tlsKeyPath
-          ? { IH_TLS_KEY_PATH: this.config.tlsKeyPath, TLS_KEY_PATH: this.config.tlsKeyPath }
-          : {}),
+        // The core stays on loopback HTTP. The LAN HTTPS gateway adds Secure to
+        // Set-Cookie without breaking the local Electron/Vite session.
+        IH_SECURE_COOKIES: "false",
+        IH_TRUST_PROXY: String(this.config.lanEnabled),
+        ...(this.config.lanOrigin ? { IH_LAN_ORIGIN: this.config.lanOrigin } : {}),
         INVENTORY_HUB_PARENT_PID: String(process.pid),
       },
       stdio: "pipe",

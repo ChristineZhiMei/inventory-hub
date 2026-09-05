@@ -56,7 +56,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   const https = config.tlsCertPath && config.tlsKeyPath ? { cert: readFileSync(config.tlsCertPath), key: readFileSync(config.tlsKeyPath) } : undefined;
   const publicHttps = config.protocol === "https" || config.appOrigins.some((origin) => origin.startsWith("https://"));
   const secureContext = publicHttps || config.host === "127.0.0.1" || config.host === "localhost";
-  const app = Fastify({ logger: config.logLevel === "silent" ? false : { level: config.logLevel }, bodyLimit: 30 * 1024 * 1024, trustProxy: config.appMode === "server" ? 1 : false, ...(https ? { https } : {}) }) as unknown as InventoryServer;
+  const app = Fastify({ logger: config.logLevel === "silent" ? false : { level: config.logLevel }, bodyLimit: 30 * 1024 * 1024, trustProxy: config.trustedProxy ? 1 : false, ...(https ? { https } : {}) }) as unknown as InventoryServer;
   app.inventory = { database, config };
   const cleanupTimer = setInterval(() => void media.processCleanupJobs().catch((error) => app.log.error({ err: error }, "media cleanup failed")), 5_000);
   cleanupTimer.unref();
@@ -184,6 +184,13 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     serviceProtocol: config.protocol,
     secureContext,
     mobileCameraRequiresTrustedHttps: true,
+    lan: config.lanOrigin ? {
+      enabled: true,
+      protocol: "https",
+      host: new URL(config.lanOrigin).hostname,
+      port: Number(new URL(config.lanOrigin).port || 443),
+      url: config.lanOrigin,
+    } : { enabled: false },
   }, request.id));
   app.get("/api/v1/changes", async (request) => {
     const sinceRevision = z.coerce.number().int().min(0).default(0).parse((request.query as any).sinceRevision);
@@ -425,7 +432,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   app.get("/api/v1/cleanup-jobs", async (request) => success({ items: database.db.prepare(`SELECT id,kind,state,attempts,next_attempt_at nextAttemptAt,last_error lastError,created_at createdAt,updated_at updatedAt
     FROM cleanup_jobs ORDER BY created_at DESC LIMIT 100`).all().map((row: any) => ({ ...row, nextAttemptAt: new Date(row.nextAttemptAt).toISOString(), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() })) }, request.id));
   app.post("/api/v1/cleanup-jobs/run", async (request) => success({ processed: await media.processCleanupJobs() }, request.id));
-  app.get("/api/v1/settings/runtime", async (request) => success({ appMode: config.appMode, host: config.host, port: config.port, protocol: publicHttps ? "https" : config.protocol, serviceProtocol: config.protocol, secureContext, sqliteVersion: database.sqliteVersion, schemaVersion: 1, dataRevision: database.dataRevision }, request.id));
+  app.get("/api/v1/settings/runtime", async (request) => success({ appMode: config.appMode, host: config.host, port: config.port, protocol: publicHttps ? "https" : config.protocol, serviceProtocol: config.protocol, secureContext, sqliteVersion: database.sqliteVersion, schemaVersion: 1, dataRevision: database.dataRevision, lanEnabled: Boolean(config.lanOrigin), url: config.lanOrigin }, request.id));
 
   if (config.staticRoot) registerStaticSpa(app, config.staticRoot);
   app.setNotFoundHandler((request, reply) => {

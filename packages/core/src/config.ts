@@ -19,6 +19,8 @@ export interface InventoryConfig {
   tlsCertPath: string | undefined;
   tlsKeyPath: string | undefined;
   protocol: "http" | "https";
+  trustedProxy: boolean;
+  lanOrigin: string | undefined;
   simulatePrinting: boolean;
   logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
 }
@@ -55,6 +57,7 @@ export const loadConfig = (input: InventoryConfigInput = {}): InventoryConfig =>
   const origins = input.appOrigins ?? (originText ? originText.split(",").map((v) => v.trim()).filter(Boolean) : []);
   const tlsCertPath = input.tlsCertPath ?? process.env.IH_TLS_CERT_PATH ?? process.env.TLS_CERT_PATH;
   const tlsKeyPath = input.tlsKeyPath ?? process.env.IH_TLS_KEY_PATH ?? process.env.TLS_KEY_PATH;
+  const lanOrigin = parseLanOrigin(input.lanOrigin ?? process.env.IH_LAN_ORIGIN);
   if (Boolean(tlsCertPath) !== Boolean(tlsKeyPath)) throw new Error("TLS 证书和私钥路径必须成对提供");
   const sessionSecret = input.sessionSecret ?? process.env.IH_SESSION_SECRET ?? process.env.SESSION_SECRET ?? (appMode === "server" ? undefined : randomBytes(32).toString("hex"));
   if (!sessionSecret || sessionSecret.length < 32) throw new Error("会话密钥必须至少包含 32 个字符");
@@ -74,7 +77,18 @@ export const loadConfig = (input: InventoryConfigInput = {}): InventoryConfig =>
     tlsCertPath,
     tlsKeyPath,
     protocol: tlsCertPath && tlsKeyPath ? "https" : "http",
+    trustedProxy: input.trustedProxy ?? (process.env.IH_TRUST_PROXY ? process.env.IH_TRUST_PROXY === "true" : appMode === "server"),
+    lanOrigin,
     simulatePrinting: input.simulatePrinting ?? (process.env.IH_PRINT_MODE ?? process.env.PRINT_MODE) !== "native",
     logLevel: parseLogLevel(input.logLevel ?? process.env.IH_LOG_LEVEL ?? process.env.LOG_LEVEL),
   };
 };
+
+function parseLanOrigin(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("IH_LAN_ORIGIN 必须是无路径、无凭据的 HTTPS 地址");
+  }
+  return url.origin;
+}

@@ -38,7 +38,15 @@ export interface DesktopEnvironment {
   serviceOrigin: string;
   lanEnabled: boolean;
   lanOrigin?: string;
+  certificateInstallUrl?: string;
+  caFingerprint?: string;
+  lanAddresses?: string[];
   userDataPath: string;
+}
+
+export interface LanConfigurationResult {
+  enabled: boolean;
+  restartScheduled: true;
 }
 
 export interface PrinterSummary {
@@ -123,6 +131,7 @@ export interface InventoryHubDesktopApi {
   selectMediaDirectory(): Promise<SelectedDirectory | null>;
   validateMediaDirectory(selectionToken: string): Promise<MediaDirectoryValidation>;
   openManagedPath(kind: ManagedPathKind, selectionToken?: string): Promise<void>;
+  setLanEnabled(enabled: boolean): Promise<LanConfigurationResult>;
   listPrinters(): Promise<PrinterSummary[]>;
   printLabel(request: PrintLabelRequest): Promise<PrintLabelResult>;
 }

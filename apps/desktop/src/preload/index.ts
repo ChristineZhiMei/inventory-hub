@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopEnvironment,
   InventoryHubDesktopApi,
+  LanConfigurationResult,
   ManagedPathKind,
   MediaDirectoryValidation,
   PrintLabelRequest,
@@ -28,6 +29,8 @@ const api: InventoryHubDesktopApi = {
     ) as Promise<MediaDirectoryValidation>,
   openManagedPath: (kind: ManagedPathKind, selectionToken?: string) =>
     ipcRenderer.invoke("desktop:open-managed-path", kind, selectionToken) as Promise<void>,
+  setLanEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke("desktop:set-lan-enabled", enabled) as Promise<LanConfigurationResult>,
   listPrinters: () => ipcRenderer.invoke("desktop:list-printers") as Promise<PrinterSummary[]>,
   printLabel: (request: PrintLabelRequest) =>
     ipcRenderer.invoke("desktop:print-label", request) as Promise<PrintLabelResult>,

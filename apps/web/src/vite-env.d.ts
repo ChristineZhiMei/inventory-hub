@@ -7,7 +7,10 @@ interface Window {
       displayPath?: string;
     } | null>;
     startMediaMigration?: (token: string) => Promise<unknown>;
-    setLanEnabled?: (enabled: boolean) => Promise<unknown>;
+    setLanEnabled?: (enabled: boolean) => Promise<{
+      enabled: boolean;
+      restartScheduled: true;
+    }>;
     validateMediaDirectory?: (token: string) => Promise<unknown>;
     openManagedPath?: (kind: string) => Promise<unknown>;
     listPrinters?: () => Promise<unknown[]>;
@@ -26,7 +29,19 @@ interface Window {
         landscape?: boolean;
       };
     }) => Promise<{ acceptedBySystem: boolean; message?: string }>;
-    getEnvironment?: () => Promise<Record<string, unknown>>;
+    getEnvironment?: () => Promise<{
+      appVersion: string;
+      platform: string;
+      arch: string;
+      mode: "desktop" | "remote";
+      serviceOrigin: string;
+      lanEnabled: boolean;
+      lanOrigin?: string;
+      certificateInstallUrl?: string;
+      caFingerprint?: string;
+      lanAddresses?: string[];
+      userDataPath: string;
+    }>;
     getServiceStatus?: () => Promise<{
       protocol?: string;
       host?: string;
