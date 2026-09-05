@@ -231,7 +231,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   app.get<{ Params: { code: string } }>("/api/v1/codes/:code/barcode", async (request, reply) => {
     const node = nodes.byCode(request.params.code);
     reply.type("image/png").header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff");
-    return printing.barcodePng(node.code);
+    return printing.barcodePng(node.code, false);
   });
 
   app.post("/api/v1/inventory/preview", async (request) => success(inventory.preview(OperationInputSchema.parse(request.body)), request.id));

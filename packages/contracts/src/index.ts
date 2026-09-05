@@ -1,4 +1,5 @@
 import { z } from "zod";
+export * from "./label.js";
 
 export const NodeTypeSchema = z.enum(["WAREHOUSE", "BOX", "BAG", "ITEM"]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;

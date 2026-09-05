@@ -10,6 +10,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@inventory-hub/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@inventory-hub/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -82,6 +85,9 @@ importers:
       '@hookform/resolvers':
         specifier: 5.7.1
         version: 5.7.1(ajv@8.20.0)(react-hook-form@7.84.0(react@19.2.0))(zod@4.4.3)
+      '@inventory-hub/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@tanstack/react-query':
         specifier: 5.101.4
         version: 5.101.4(react@19.2.0)

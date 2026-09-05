@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import bwipjs from "bwip-js";
 import type { PrintCreateInput } from "@inventory-hub/contracts";
+import { labelBarcodeOptions, labelPaper } from "@inventory-hub/contracts";
 import type { InventoryDatabase } from "../db/database.js";
 import type { AppMode } from "../config.js";
 import { getNode } from "../domain/model.js";
@@ -22,7 +23,7 @@ export class PrintService {
   ) {}
 
   async barcodePng(code: string, includeText = true): Promise<Buffer> {
-    return bwipjs.toBuffer({ bcid: "code128", text: code, includetext: includeText, scale: 3, height: 12, textxalign: "center" });
+    return bwipjs.toBuffer({ ...labelBarcodeOptions, text: code, includetext: includeText, textxalign: "center" });
   }
 
   create(identity: RequestIdentity, input: PrintCreateInput): any {
@@ -55,7 +56,7 @@ export class PrintService {
             copyIndex,
             templateId: input.templateId,
             templateVersion: 1,
-            paper: { widthMm: 40, heightMm: 30, marginMm: 1.5, orientation: "landscape" },
+            paper: { ...labelPaper(input.templateId), orientation: "portrait" },
             printerId: input.printerId,
             executorId: input.executorId,
             renderVersion: 1,

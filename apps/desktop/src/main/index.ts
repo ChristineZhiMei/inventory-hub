@@ -214,7 +214,7 @@ function configureSessionSecurity(targetSession: Session, pageUrl: string): void
     "media-src 'self' blob:",
     `connect-src ${connectSources}`,
     "object-src 'none'",
-    "frame-src 'none'",
+    "frame-src 'self'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "form-action 'self'",

@@ -16,6 +16,7 @@
     "package:win:x64": "node scripts/assert-build-host.mjs win32 && pnpm run build && node scripts/run-builder.mjs --win nsis zip --x64"
   },
   "dependencies": {
+    "@inventory-hub/contracts": "workspace:*",
     "@inventory-hub/core": "workspace:*",
     "bwip-js": "3.0.4"
   },

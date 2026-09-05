@@ -145,6 +145,9 @@ export interface PrintJob {
     code: string;
     name: string;
     copyIndex: number;
+    payloadSnapshot?: {
+      paper?: { widthMm: number; heightMm: number; marginMm: number };
+    };
     error?: string;
   }>;
 }
