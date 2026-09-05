@@ -1,0 +1,121 @@
+{
+  "name": "@inventory-hub/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inventory Hub Electron desktop host",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "clean": "rimraf dist release",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "pnpm run build && node scripts/run-dev.mjs",
+    "start": "electron .",
+    "package": "pnpm run build && node scripts/run-builder.mjs --dir",
+    "package:mac:arm64": "node scripts/assert-build-host.mjs darwin && pnpm run build && node scripts/run-builder.mjs --mac dmg zip --arm64",
+    "package:mac:x64": "node scripts/assert-build-host.mjs darwin && pnpm run build && node scripts/run-builder.mjs --mac dmg zip --x64",
+    "package:win:x64": "node scripts/assert-build-host.mjs win32 && pnpm run build && node scripts/run-builder.mjs --win nsis zip --x64"
+  },
+  "dependencies": {
+    "@inventory-hub/contracts": "workspace:*",
+    "@inventory-hub/core": "workspace:*",
+    "bwip-js": "3.0.4",
+    "node-forge": "1.3.1"
+  },
+  "optionalDependencies": {
+    "@img/sharp-darwin-arm64": "0.34.5",
+    "@img/sharp-darwin-x64": "0.34.5",
+    "@img/sharp-libvips-darwin-arm64": "1.2.4",
+    "@img/sharp-libvips-darwin-x64": "1.2.4",
+    "@img/sharp-win32-x64": "0.34.5"
+  },
+  "devDependencies": {
+    "@types/bwip-js": "3.2.3",
+    "@types/node": "22.18.1",
+    "@types/node-forge": "1.3.14",
+    "cross-env": "10.0.0",
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3",
+    "rimraf": "6.0.1",
+    "typescript": "5.9.2"
+  },
+  "build": {
+    "appId": "com.inventoryhub.desktop",
+    "productName": "Inventory Hub",
+    "icon": "assets/icon.png",
+    "artifactName": "inventory-hub-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "afterPack": "scripts/after-pack.cjs",
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/sharp/**/*",
+      "node_modules/@img/sharp-*/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "sign": false,
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": null
+  }
+}

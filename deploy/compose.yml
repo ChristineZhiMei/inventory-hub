@@ -1,0 +1,63 @@
+name: inventory-hub
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    restart: unless-stopped
+    init: true
+    environment:
+      IH_APP_MODE: server
+      IH_APP_ORIGIN: ${IH_APP_ORIGIN:-https://localhost:19473}
+      IH_HOST: 0.0.0.0
+      IH_PORT: "18473"
+      IH_DATA_DIR: /var/lib/inventory-hub/database
+      IH_DATABASE_PATH: /var/lib/inventory-hub/database/inventory.sqlite
+      IH_MEDIA_ROOT: /var/lib/inventory-hub/media
+      IH_SESSION_SECRET: ${IH_SESSION_SECRET:?set IH_SESSION_SECRET to at least 32 random characters}
+      IH_SECURE_COOKIES: "true"
+      IH_LOG_LEVEL: ${IH_LOG_LEVEL:-info}
+      IH_PRINT_MODE: simulator
+    expose:
+      - "18473"
+    volumes:
+      - inventory_hub_database:/var/lib/inventory-hub/database
+      - inventory_hub_media:/var/lib/inventory-hub/media
+    networks:
+      - inventory_hub_private
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${IH_PUBLIC_PORT:-19473}:19473"
+    volumes:
+      - ./certs/fullchain.pem:/etc/nginx/tls/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/nginx/tls/privkey.pem:ro
+    networks:
+      - inventory_hub_private
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  inventory_hub_private:
+    driver: bridge
+    internal: true
+
+volumes:
+  inventory_hub_database:
+  inventory_hub_media:

@@ -1,0 +1,18 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Keep the native Sharp payloads required by every published desktop target.
+# Without this, pnpm installs only the current host platform and electron-builder
+# can create an archive that fails when image processing is first used.
+supportedArchitectures:
+  os:
+    - current
+    - darwin
+    - win32
+  cpu:
+    - current
+    - arm64
+    - x64
+  libc:
+    - current
