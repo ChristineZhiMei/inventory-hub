@@ -626,9 +626,16 @@ body {
 }
 
 .page-toolbar__filters {
+  display: flex;
   min-width: 0;
   max-width: 100%;
+  align-items: center;
+  gap: var(--space-2);
   overflow-x: auto;
+
+  > * {
+    flex: 0 0 auto;
+  }
 }
 
 .location-toolbar {

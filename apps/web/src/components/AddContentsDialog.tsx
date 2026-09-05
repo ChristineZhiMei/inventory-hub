@@ -74,10 +74,10 @@ export function AddContentsDialog({
       ? ["BAG", "ITEM"] as const
       : ["BOX", "BAG", "ITEM"] as const;
   const candidateHint = target.type === "BAG"
-    ? "显示尚未放入袋子的在库物品。"
+    ? "可选择其他位置中的在库物品，移动后直接放入该袋子。"
     : target.type === "BOX"
-      ? "显示尚未放入箱子的袋子，以及未装袋、未入箱的散件物品。"
-      : "显示可直接放入仓库的箱子、未入箱袋子和散件物品。";
+      ? "可选择其他位置中的在库袋子或物品，袋子内的内容会保持不变。"
+      : "可选择其他位置中的在库箱子、袋子或物品，容器内的内容会保持不变。";
 
   useEffect(() => {
     if (!open) return;

@@ -179,6 +179,11 @@ export function NodeDetailPage() {
     );
   const node = detail.data;
   const contentItems = pageItems(contents.data);
+  const addContentsLabel = node.type === "BAG"
+    ? "添加物品"
+    : node.type === "BOX"
+      ? "添加袋子或物品"
+      : "添加箱子、袋子或物品";
   const canCreateMatchingLocation =
     node.type === "ITEM" &&
     node.stockStatus === "IN_STOCK" &&
@@ -244,7 +249,7 @@ export function NodeDetailPage() {
             {node.type !== "ITEM" && (
               <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
                 <PackagePlus className="size-4" />
-                添加内容
+                {addContentsLabel}
               </Button>
             )}
             <Link
@@ -515,7 +520,7 @@ export function NodeDetailPage() {
                     action={
                       <div className="flex flex-wrap justify-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setAddContentsOpen(true)}>
-                          选择已有内容
+                          {addContentsLabel}
                         </Button>
                         <Link
                           to={`/intake?targetId=${node.id}`}

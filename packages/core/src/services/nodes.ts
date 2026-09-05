@@ -255,24 +255,15 @@ export class NodeService {
       "包含目标位置不支持的档案类型",
     );
     const types = requestedTypes.length ? requestedTypes : allowedTypes;
-    const parentType = "(SELECT parent.type FROM nodes parent WHERE parent.id=n.parent_id)";
     const where = [
       "n.stock_status='IN_STOCK'",
-      "n.id<>?",
-      "COALESCE(n.parent_id,'')<>?",
+      `n.id NOT IN (WITH RECURSIVE target_tree(id) AS (
+        SELECT id FROM nodes WHERE id=?
+        UNION ALL SELECT child.id FROM nodes child JOIN target_tree parent ON child.parent_id=parent.id
+      ) SELECT id FROM target_tree)`,
       `n.type IN (${types.map(() => "?").join(",")})`,
     ];
-    const params: unknown[] = [target.id, target.id, ...types];
-    if (target.type === "BAG") {
-      where.push(`${parentType}<>'BAG'`);
-    } else if (target.type === "BOX") {
-      where.push(`((n.type='BAG' AND ${parentType}<>'BOX') OR
-        (n.type='ITEM' AND ${parentType} NOT IN ('BAG','BOX')))`);
-    } else {
-      where.push(`((n.type='BOX') OR
-        (n.type='BAG' AND ${parentType}<>'BOX') OR
-        (n.type='ITEM' AND ${parentType} NOT IN ('BAG','BOX')))`);
-    }
+    const params: unknown[] = [target.id, ...types];
     if (query.q) {
       const pattern = `%${String(query.q).trim()}%`;
       where.push(`(n.code LIKE ? OR n.name LIKE ?

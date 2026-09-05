@@ -5,6 +5,8 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  LayoutGrid,
+  List,
   ListFilter,
   PackagePlus,
   RotateCcw,
@@ -17,8 +19,9 @@ import { pageItems, queries } from "@/lib/queries";
 import type { InventoryAction, InventoryNode } from "@/lib/types";
 import { InventoryActionDialog } from "@/components/InventoryActionDialog";
 import { NodeCard } from "@/components/NodeCard";
+import { NodeListTable } from "@/components/NodeListTable";
 import { QueryError } from "@/components/Page";
-import { Button, EmptyState, Input, Select, Skeleton } from "@/components/AntUi";
+import { Button, EmptyState, Input, Segmented, Select, Skeleton } from "@/components/AntUi";
 import { useMediaQuery } from "@/lib/media";
 import { useBodyScrollLock } from "@/lib/scrollLock";
 
@@ -27,6 +30,8 @@ export function ItemsPage() {
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [action, setAction] = useState<InventoryAction | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const mobile = useMediaQuery("(max-width: 767px)");
   useBodyScrollLock(mobile && filterOpen);
   const queryString = params.toString();
@@ -71,6 +76,12 @@ export function ItemsPage() {
   const advancedFilterCount = advancedFilterKeys.filter((key) =>
     params.get(key),
   ).length;
+  function toggleSelectionMode() {
+    setSelecting((current) => {
+      if (current) setSelected([]);
+      return !current;
+    });
+  }
   function toggleAll() {
     setSelected(selected.length === items.length ? [] : items);
   }
@@ -166,17 +177,27 @@ export function ItemsPage() {
               筛选{advancedFilterCount ? `（${advancedFilterCount}）` : ""}
             </Button>
             <Button
-              variant="outline"
-              onClick={toggleAll}
+              variant={selecting ? "secondary" : "outline"}
+              onClick={toggleSelectionMode}
               disabled={!items.length}
             >
-              {selected.length === items.length && items.length ? (
+              {selecting ? (
                 <CheckSquare className="size-4" />
               ) : (
                 <Square className="size-4" />
               )}
-              {selected.length ? `已选 ${selected.length}` : "批量"}
+              {selecting ? "退出批量" : "批量"}
             </Button>
+          </div>
+          <div className="flex justify-end">
+            <Segmented
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: "card", label: <span className="inline-flex items-center gap-1"><LayoutGrid className="size-3.5" />卡片</span> },
+                { value: "list", label: <span className="inline-flex items-center gap-1"><List className="size-3.5" />列表</span> },
+              ]}
+            />
           </div>
         </div>
       ) : (
@@ -194,31 +215,43 @@ export function ItemsPage() {
           </div>
           {advancedFilters}
           <Button
-            variant="outline"
-            onClick={toggleAll}
+            variant={selecting ? "secondary" : "outline"}
+            onClick={toggleSelectionMode}
             disabled={!items.length}
           >
-            {selected.length === items.length && items.length ? (
+            {selecting ? (
               <CheckSquare className="size-4" />
             ) : (
               <Square className="size-4" />
             )}
-            {selected.length ? `已选 ${selected.length}` : "批量选择"}
+            {selecting ? "退出批量" : "批量选择"}
           </Button>
+          <Segmented
+            value={viewMode}
+            onChange={setViewMode}
+            options={[
+              { value: "card", label: "卡片" },
+              { value: "list", label: "列表" },
+            ]}
+          />
           {createAction}
         </div>
       )}
-      {selected.length > 0 && (
+      {selecting && (
         <div className="sticky top-20 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 p-3 shadow-raised backdrop-blur">
           <span className="mr-auto text-sm font-medium">
             已选择 {selected.length} 件
           </span>
-          <Button size="sm" variant="outline" onClick={() => setAction("MOVE")}>
+          <Button size="sm" variant="outline" onClick={toggleAll}>
+            {selected.length === items.length ? "取消全选" : "全选本页"}
+          </Button>
+          <Button size="sm" variant="outline" disabled={!selected.length} onClick={() => setAction("MOVE")}>
             移动
           </Button>
           <Button
             size="sm"
             variant="outline"
+            disabled={!selected.length}
             onClick={() => setAction("REMOVE")}
           >
             移出
@@ -226,6 +259,7 @@ export function ItemsPage() {
           <Button
             size="sm"
             variant="outline"
+            disabled={!selected.length}
             onClick={() => setAction("CHECK_OUT")}
           >
             出库
@@ -233,6 +267,7 @@ export function ItemsPage() {
           <Button
             size="sm"
             variant="outline"
+            disabled={!selected.length}
             onClick={() => setAction("CHECK_IN")}
           >
             入库
@@ -247,18 +282,25 @@ export function ItemsPage() {
         </div>
       ) : query.isError ? (
         <QueryError error={query.error} onRetry={() => query.refetch()} />
-      ) : items.length ? (
+      ) : items.length && viewMode === "card" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {items.map((node) => (
             <NodeCard
               key={node.id}
               node={node}
-              selectable={selected.length > 0}
+              selectable={selecting}
               selected={selected.some((item) => item.id === node.id)}
               onSelect={toggle}
             />
           ))}
         </div>
+      ) : items.length ? (
+        <NodeListTable
+          nodes={items}
+          selecting={selecting}
+          selected={selected}
+          onSelectedChange={setSelected}
+        />
       ) : (
         <EmptyState
           icon={Archive}
@@ -305,6 +347,7 @@ export function ItemsPage() {
         onClose={() => {
           setAction(null);
           setSelected([]);
+          setSelecting(false);
         }}
       />
       {mobile && (
