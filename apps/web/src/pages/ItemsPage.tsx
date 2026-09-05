@@ -20,6 +20,7 @@ import { NodeCard } from "@/components/NodeCard";
 import { QueryError } from "@/components/Page";
 import { Button, EmptyState, Input, Select, Skeleton } from "@/components/AntUi";
 import { useMediaQuery } from "@/lib/media";
+import { useBodyScrollLock } from "@/lib/scrollLock";
 
 export function ItemsPage() {
   const [params, setParams] = useSearchParams();
@@ -27,6 +28,7 @@ export function ItemsPage() {
   const [action, setAction] = useState<InventoryAction | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
+  useBodyScrollLock(mobile && filterOpen);
   const queryString = params.toString();
   const request = new URLSearchParams(params);
   request.set("limit", "30");

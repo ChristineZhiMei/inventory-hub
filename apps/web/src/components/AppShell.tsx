@@ -23,6 +23,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, resolvePendingRequest, unresolvedRequests } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { consumeLocalNativeQueue } from "@/lib/localPrinting";
+import { useBodyScrollLock } from "@/lib/scrollLock";
 import { useTheme } from "@/lib/theme";
 import { Badge, Button, Input } from "./AntUi";
 
@@ -65,6 +66,7 @@ export function AppShell() {
   const [online, setOnline] = useState(navigator.onLine);
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
+  useBodyScrollLock(drawer);
   const selectedRoute = useMemo(
     () => currentRoute(location.pathname),
     [location.pathname],

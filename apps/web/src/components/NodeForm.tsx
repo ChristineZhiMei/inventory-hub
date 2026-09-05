@@ -5,7 +5,9 @@ import { Radio, Select as AntSelect, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
+import { useMediaQuery } from "@/lib/media";
 import { pageItems, queries } from "@/lib/queries";
+import { useBodyScrollLock } from "@/lib/scrollLock";
 import type { InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
 import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
 import { ImageManager, type EditableImage } from "./ImageManager";
@@ -66,6 +68,9 @@ export function NodeForm({
   const [specificationSearchInput, setSpecificationSearchInput] = useState("");
   const [specificationSearch, setSpecificationSearch] = useState("");
   const [creatingTaxonomy, setCreatingTaxonomy] = useState<"tag" | "specification" | null>(null);
+  const [taxonomyPopupOpen, setTaxonomyPopupOpen] = useState(false);
+  const mobile = useMediaQuery("(max-width: 767px)");
+  useBodyScrollLock(mobile && taxonomyPopupOpen);
   const categories = useQuery({
     queryKey: ["categories"],
     queryFn: queries.categories,
@@ -356,6 +361,8 @@ export function NodeForm({
               optionFilterProp="label"
               maxCount={3}
               maxTagCount="responsive"
+              virtual={!mobile}
+              onOpenChange={setTaxonomyPopupOpen}
               onChange={(values) =>
                 form.setValue("categoryIds", values, {
                   shouldDirty: true,
@@ -391,6 +398,8 @@ export function NodeForm({
                     void specifications.fetchNextPage();
                   }
                 }}
+                virtual={!mobile}
+                onOpenChange={setTaxonomyPopupOpen}
                 loading={specifications.isLoading || creatingTaxonomy === "specification"}
                 notFoundContent={
                   specifications.isFetching ? <Spin size="small" /> : "输入后按回车创建"
@@ -414,6 +423,8 @@ export function NodeForm({
               size="large"
               className="w-full"
               optionFilterProp="label"
+              virtual={!mobile}
+              onOpenChange={setTaxonomyPopupOpen}
               onChange={(values) => void updateCreatableSelection("tag", values)}
               loading={tags.isLoading || creatingTaxonomy === "tag"}
               maxTagCount="responsive"

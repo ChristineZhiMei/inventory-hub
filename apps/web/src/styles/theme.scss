@@ -332,6 +332,9 @@ body {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   border-inline-end: 0 !important;
   background: transparent !important;
 }
@@ -365,6 +368,13 @@ body {
 .app-select .ant-select {
   width: 100%;
   min-width: 0;
+}
+
+.ant-select-dropdown,
+.ant-select-dropdown .rc-virtual-list-holder {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-label {
@@ -451,10 +461,12 @@ body {
 
   .ant-image-img {
     object-fit: cover;
-    transition: transform var(--duration-normal) ease;
+    transition: transform var(--motion-normal) ease;
   }
+}
 
-  &:hover .ant-image-img {
+@media (hover: hover) and (pointer: fine) {
+  .node-detail-image:hover .ant-image-img {
     transform: scale(1.05);
   }
 }
@@ -531,6 +543,9 @@ body {
 .app-mobile-dialog__body {
   max-height: calc(92dvh - 140px);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-mobile-dialog__footer {
@@ -734,6 +749,9 @@ body {
   max-height: calc(88dvh - 144px);
   gap: var(--space-3);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   padding: var(--space-4);
 }
 
@@ -764,6 +782,57 @@ input,
 select,
 textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+:where(
+  button,
+  a,
+  [role="button"],
+  .ant-btn,
+  .ant-dropdown-menu-item,
+  .ant-menu-item,
+  .ant-segmented-item,
+  .ant-select-item,
+  .ant-select-selector,
+  .adm-list-item,
+  .adm-tab-bar-item
+) {
+  touch-action: manipulation;
+}
+
+.node-card,
+.node-card__chevron {
+  transition:
+    transform var(--motion-normal) ease,
+    box-shadow var(--motion-normal) ease,
+    opacity var(--motion-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .node-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .node-card:hover .node-card__chevron {
+    transform: translateX(2px);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  :where(button, a, [role="button"], .ant-menu-item, .ant-segmented-item, .adm-tab-bar-item) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .node-card:active {
+    transform: scale(0.995);
+    opacity: 0.9;
+  }
+
+  .node-card__chevron {
+    transform: none !important;
+  }
 }
 
 :focus-visible {

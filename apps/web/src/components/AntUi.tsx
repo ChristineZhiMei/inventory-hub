@@ -20,6 +20,7 @@ import {
   forwardRef,
   isValidElement,
   useId,
+  useState,
   type ButtonHTMLAttributes,
   type ChangeEvent,
   type FocusEvent,
@@ -32,6 +33,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { useMediaQuery } from "@/lib/media";
+import { useBodyScrollLock } from "@/lib/scrollLock";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant =
@@ -156,6 +158,9 @@ export const Select = forwardRef<
     ref,
   ) => {
     const generatedId = useId();
+    const mobile = useMediaQuery("(max-width: 767px)");
+    const [popupOpen, setPopupOpen] = useState(false);
+    useBodyScrollLock(mobile && popupOpen);
     const options = Children.toArray(children)
       .filter((child): child is OptionElement => isValidElement(child))
       .map((child) => ({
@@ -181,6 +186,8 @@ export const Select = forwardRef<
           options={options}
           disabled={disabled}
           size="large"
+          virtual={!mobile}
+          onOpenChange={setPopupOpen}
           onChange={(next) =>
             onChange?.(
               eventTarget(String(next)) as ChangeEvent<HTMLSelectElement>,
@@ -369,6 +376,7 @@ export function Dialog({
   footer?: ReactNode;
 }) {
   const mobile = useMediaQuery("(max-width: 767px)");
+  useBodyScrollLock(mobile && open);
   const heading = (
     <div>
       <strong>{title}</strong>
