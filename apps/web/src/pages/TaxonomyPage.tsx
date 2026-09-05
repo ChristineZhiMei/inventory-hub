@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit3, Plus, Ruler, Search, Shapes, Tag as TagIcon, Trash2 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
+import { buildCategoryTreeRows } from "@/lib/categoryTree";
 import { pageItems, queries } from "@/lib/queries";
 import type { Category, Specification, Tag } from "@/lib/types";
 import { QueryError } from "@/components/Page";
@@ -67,9 +68,14 @@ export function TaxonomyPage() {
     initialPageParam: "",
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
   });
+  const allCategories = pageItems(categories.data);
+  const categoryTreeRows = buildCategoryTreeRows(allCategories);
+  const categoryDepthById = new Map(
+    categoryTreeRows.map(({ category, depth }) => [category.id, depth]),
+  );
   const list =
     tab === "categories"
-      ? pageItems(categories.data)
+      ? categoryTreeRows.map(({ category }) => category)
       : tab === "tags"
         ? pageItems(tags.data)
         : specifications.data?.pages.flatMap((page) => page.items) ?? [];
@@ -234,18 +240,18 @@ export function TaxonomyPage() {
               {kindLabel(tab)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="divide-y">
+          <CardContent className="divide-y" role={tab === "categories" ? "tree" : undefined}>
             {list.map((item) => (
               <div
                 key={item.id}
                 className="flex min-h-16 items-center gap-3 py-2"
+                role={tab === "categories" ? "treeitem" : undefined}
+                aria-level={tab === "categories" ? (categoryDepthById.get(item.id) || 0) + 1 : undefined}
+                data-category-depth={tab === "categories" ? categoryDepthById.get(item.id) || 0 : undefined}
                 style={{
                   paddingLeft:
                     tab === "categories"
-                      ? getCategoryDepth(
-                          item as Category,
-                          pageItems(categories.data),
-                        ) * 20
+                      ? (categoryDepthById.get(item.id) || 0) * 24
                       : 0,
                 }}
               >
@@ -355,15 +361,15 @@ export function TaxonomyPage() {
                 onChange={(e) => setParentId(e.target.value)}
               >
                 <option value="">顶级分类</option>
-                {pageItems(categories.data)
+                {categoryTreeRows
                   .filter(
-                    (item) =>
-                      item.id !== editing.item?.id &&
-                      !editingExcluded.has(item.id),
+                    ({ category }) =>
+                      category.id !== editing.item?.id &&
+                      !editingExcluded.has(category.id),
                   )
-                  .map((category) => (
+                  .map(({ category, depth }) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {`${"　".repeat(depth)}${depth ? "└ " : ""}${category.name}`}
                     </option>
                   ))}
               </Select>
@@ -422,15 +428,15 @@ export function TaxonomyPage() {
                   onChange={(event) => setReassignTargetId(event.target.value)}
                 >
                   <option value="">选择目标分类</option>
-                  {pageItems(categories.data)
+                  {categoryTreeRows
                     .filter(
-                      (category) =>
+                      ({ category }) =>
                         category.id !== deleting.item?.id &&
                         !deletingExcluded.has(category.id),
                     )
-                    .map((category) => (
+                    .map(({ category, depth }) => (
                       <option value={category.id} key={category.id}>
-                        {category.name}
+                        {`${"　".repeat(depth)}${depth ? "└ " : ""}${category.name}`}
                       </option>
                     ))}
                 </Select>
@@ -469,19 +475,6 @@ export function TaxonomyPage() {
   );
 }
 
-function getCategoryDepth(category: Category, all: Category[]) {
-  let depth = 0;
-  let current = category;
-  const visited = new Set<string>();
-  while (current.parentId && depth < 5 && !visited.has(current.id)) {
-    visited.add(current.id);
-    const parent = all.find((item) => item.id === current.parentId);
-    if (!parent) break;
-    current = parent;
-    depth += 1;
-  }
-  return depth;
-}
 function descendantIds(categoryId: string, all: Category[]) {
   const found = new Set<string>();
   const visit = (id: string) => {
