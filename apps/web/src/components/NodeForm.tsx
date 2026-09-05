@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radio, Select as AntSelect, Spin } from "antd";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
@@ -265,14 +265,21 @@ export function NodeForm({
             error={form.formState.errors.name?.message}
             required
           >
-            <Input
-              id="name"
-              aria-invalid={!!form.formState.errors.name}
-              autoFocus
-              {...form.register("name")}
-              placeholder={
-                type === "ITEM" ? "例如：灰色羊毛大衣" : `例如：${typeName}名称`
-              }
+            <Controller
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <Input
+                  {...field}
+                  id="name"
+                  value={field.value}
+                  aria-invalid={!!form.formState.errors.name}
+                  autoFocus
+                  placeholder={
+                    type === "ITEM" ? "例如：灰色羊毛大衣" : `例如：${typeName}名称`
+                  }
+                />
+              )}
             />
           </Field>
           <Field
@@ -365,10 +372,17 @@ export function NodeForm({
             error={form.formState.errors.notes?.message}
             className="md:col-span-2"
           >
-            <Textarea
-              id="notes"
-              {...form.register("notes")}
-              placeholder="记录清洗、季节或其他说明"
+            <Controller
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <Textarea
+                  {...field}
+                  id="notes"
+                  value={field.value || ""}
+                  placeholder="记录清洗、季节或其他说明"
+                />
+              )}
             />
           </Field>
         </div>

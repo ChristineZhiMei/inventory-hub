@@ -87,18 +87,18 @@ export function NodeEditorPage({
     BOX: "箱子",
     WAREHOUSE: "仓库",
   }[type];
-  if (mode === "edit" && detail.isLoading)
-    return (
-      <>
-        <PageHeader title="加载档案…" back />
-        <Skeleton className="h-96" />
-      </>
-    );
   if (mode === "edit" && detail.isError)
     return (
       <>
         <PageHeader title="档案编辑" back />
         <QueryError error={detail.error} onRetry={() => detail.refetch()} />
+      </>
+    );
+  if (mode === "edit" && !detail.data)
+    return (
+      <>
+        <PageHeader title="加载档案…" back />
+        <Skeleton className="h-96" />
       </>
     );
   return (
@@ -118,6 +118,7 @@ export function NodeEditorPage({
         </Alert>
       )}
       <NodeForm
+        key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}`}
         type={type}
         initial={detail.data}
         onSubmit={(payload) =>
