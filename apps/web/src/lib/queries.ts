@@ -66,6 +66,12 @@ export const queries = {
         `/nodes/${id}/contents?recursive=${recursive}&limit=100`,
       ),
     ),
+  contentCandidates: async (id: string, search = "") =>
+    normalizePage(
+      await api<PageData<InventoryNode>>(
+        `/nodes/${id}/content-candidates${search ? `?${search}` : ""}`,
+      ),
+    ),
   categories: () => api<PageData<Category> | Category[]>("/categories"),
   tags: () => api<PageData<Tag> | Tag[]>("/tags"),
   specifications: (search = "") =>

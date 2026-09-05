@@ -239,6 +239,10 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     const result = nodes.contents(request.params.id, query.recursive !== "false", Math.min(Number(query.limit) || 100, 100), query.cursor, query.treeToken);
     return success(result, request.id, result.nextCursor);
   });
+  app.get<{ Params: { id: string } }>("/api/v1/nodes/:id/content-candidates", async (request) => {
+    const result = nodes.listContentCandidates(request.params.id, request.query as any);
+    return success(result, request.id, result.nextCursor);
+  });
   app.get<{ Params: { code: string } }>("/api/v1/codes/:code", async (request) => success(nodes.byCode(request.params.code), request.id));
   app.get<{ Params: { code: string } }>("/api/v1/codes/:code/barcode", async (request, reply) => {
     const node = nodes.byCode(request.params.code);

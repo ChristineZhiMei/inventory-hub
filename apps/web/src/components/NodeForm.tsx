@@ -530,7 +530,7 @@ export function NodeForm({
         <section className="surface p-5">
           <Field
             label="创建完成后"
-            hint="可继续创建同名、同分类、同规格和同标签的收纳位置"
+            hint="可继续创建同信息的收纳位置，并自动把刚创建的物品移入其中"
           >
             <Select
               value={form.watch("nextCreateType")}

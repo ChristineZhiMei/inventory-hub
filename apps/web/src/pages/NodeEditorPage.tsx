@@ -60,6 +60,14 @@ export function NodeEditorPage({
               values.createMode === "PLACE"
                 ? values.targetLocationToken
                 : undefined,
+            initialContent: sourceItem.data
+              ? {
+                  nodeId: sourceItem.data.id,
+                  expectedLocationVersion: sourceItem.data.locationVersion,
+                  locationToken: sourceItem.data.locationToken,
+                  subtreeToken: sourceItem.data.subtreeToken,
+                }
+              : undefined,
           },
         });
       return api<{ id?: string; node?: { id: string } }>(`/nodes/${id}`, {
@@ -151,6 +159,11 @@ export function NodeEditorPage({
           {errorMessage(mutation.error)}
         </Alert>
       )}
+      {sourceItem.data && (
+        <Alert title="创建后自动装入" tone="info" className="mb-4">
+          创建{typeName}成功后，{sourceItem.data.name}（{sourceItem.data.code}）会自动移动到该{typeName}中。
+        </Alert>
+      )}
       <NodeForm
         key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}:${sourceItem.data?.version || "empty"}`}
         type={type}
@@ -160,7 +173,13 @@ export function NodeEditorPage({
           mutation.mutateAsync(payload).then(() => undefined)
         }
         busy={mutation.isPending}
-        submitLabel={mode === "create" ? `创建${typeName}` : "保存修改"}
+        submitLabel={
+          mode === "create" && sourceItem.data
+            ? `创建${typeName}并装入物品`
+            : mode === "create"
+              ? `创建${typeName}`
+              : "保存修改"
+        }
       />
     </div>
   );

@@ -493,14 +493,19 @@ export function NodeDetailPage() {
                           : Warehouse
                     }
                     title="这里还是空的"
-                    description="可以进入连续录入工作台，新建或扫码装入已有档案。"
+                    description="可以从已有档案中选择，也可以进入连续录入工作台新建或扫码。"
                     action={
-                      <Link
-                        to={`/intake?targetId=${node.id}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        开始连续录入
-                      </Link>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setAddContentsOpen(true)}>
+                          选择已有内容
+                        </Button>
+                        <Link
+                          to={`/intake?targetId=${node.id}`}
+                          className="inline-flex min-h-8 items-center text-sm font-medium text-primary hover:underline"
+                        >
+                          开始连续录入
+                        </Link>
+                      </div>
                     }
                   />
                 )}

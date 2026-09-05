@@ -46,8 +46,22 @@ export class NodeService {
       this.database.db.prepare("UPDATE code_reservations SET state='ACTIVE',updated_at=? WHERE code=?").run(now, reservation.code);
       const node = getNode(this.database.db, reservation.nodeId);
       const operationId = this.logOperation(identity.requestId, identity.userId, "CREATE", node, null, snapshotNode(this.database.db, node), true, undefined);
+      const initialContentOperationId = input.initialContent
+        ? this.placeInitialContent(
+            `${identity.requestId}:initial-content`,
+            identity.userId,
+            node,
+            input.initialContent,
+            now,
+          )
+        : undefined;
       this.database.bumpRevision();
-      const value = { operationId, changed: true, node: this.detail(reservation.nodeId) };
+      const value = {
+        operationId,
+        ...(initialContentOperationId ? { initialContentOperationId } : {}),
+        changed: true,
+        node: this.detail(reservation.nodeId),
+      };
       this.idempotency.persistSuccess(identity, value);
       return value;
     });
@@ -215,6 +229,92 @@ export class NodeService {
         counts: this.countContents(node.id),
         images: this.media.listForNode(node.id),
       })),
+      nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null,
+    };
+  }
+
+  listContentCandidates(targetId: string, query: Record<string, unknown>): any {
+    const target = getNode(this.database.db, targetId);
+    invariant(target.type !== "ITEM", "INVALID_PARENT_TYPE", "物品不能包含其他档案");
+    invariant(
+      target.type === "WAREHOUSE" || target.stockStatus === "IN_STOCK",
+      "INVALID_STATE",
+      "目标位置当前不可用",
+    );
+    const limit = Math.min(Math.max(Number(query.limit) || 30, 1), 100);
+    const offset = decodeCursor(query.cursor);
+    const allowedTypes: NodeType[] = target.type === "BAG"
+      ? ["ITEM"]
+      : target.type === "BOX"
+        ? ["BAG", "ITEM"]
+        : ["BOX", "BAG", "ITEM"];
+    const requestedTypes = queryList(query.types) as NodeType[];
+    invariant(
+      requestedTypes.every((type) => allowedTypes.includes(type)),
+      "VALIDATION_ERROR",
+      "包含目标位置不支持的档案类型",
+    );
+    const types = requestedTypes.length ? requestedTypes : allowedTypes;
+    const parentType = "(SELECT parent.type FROM nodes parent WHERE parent.id=n.parent_id)";
+    const where = [
+      "n.stock_status='IN_STOCK'",
+      "n.id<>?",
+      "COALESCE(n.parent_id,'')<>?",
+      `n.type IN (${types.map(() => "?").join(",")})`,
+    ];
+    const params: unknown[] = [target.id, target.id, ...types];
+    if (target.type === "BAG") {
+      where.push(`${parentType}<>'BAG'`);
+    } else if (target.type === "BOX") {
+      where.push(`((n.type='BAG' AND ${parentType}<>'BOX') OR
+        (n.type='ITEM' AND ${parentType} NOT IN ('BAG','BOX')))`);
+    } else {
+      where.push(`((n.type='BOX') OR
+        (n.type='BAG' AND ${parentType}<>'BOX') OR
+        (n.type='ITEM' AND ${parentType} NOT IN ('BAG','BOX')))`);
+    }
+    if (query.q) {
+      const pattern = `%${String(query.q).trim()}%`;
+      where.push(`(n.code LIKE ? OR n.name LIKE ?
+        OR EXISTS(SELECT 1 FROM node_tags qnt JOIN tags qt ON qt.id=qnt.tag_id WHERE qnt.node_id=n.id AND qt.name LIKE ?)
+        OR EXISTS(SELECT 1 FROM node_specifications qns JOIN specifications qs ON qs.id=qns.specification_id WHERE qns.node_id=n.id AND qs.name LIKE ?)
+        OR EXISTS(SELECT 1 FROM node_categories qnc JOIN categories qc ON qc.id=qnc.category_id WHERE qnc.node_id=n.id AND qc.name LIKE ?))`);
+      params.push(pattern, pattern, pattern, pattern, pattern);
+    }
+    if (query.categoryId) {
+      where.push(`EXISTS(SELECT 1 FROM node_categories fnc WHERE fnc.node_id=n.id AND fnc.category_id IN
+        (WITH RECURSIVE cats(id) AS (SELECT id FROM categories WHERE id=? UNION ALL SELECT c.id FROM categories c JOIN cats ON c.parent_id=cats.id) SELECT id FROM cats))`);
+      params.push(String(query.categoryId));
+    }
+    const tagIds = queryList(query.tagIds);
+    if (tagIds.length) {
+      where.push(`(SELECT count(DISTINCT nt.tag_id) FROM node_tags nt WHERE nt.node_id=n.id AND nt.tag_id IN (${tagIds.map(() => "?").join(",")}))=?`);
+      params.push(...tagIds, tagIds.length);
+    }
+    if (query.locationId) {
+      where.push(`n.id IN (WITH RECURSIVE tree(id) AS (
+        SELECT id FROM nodes WHERE id=? UNION ALL SELECT c.id FROM nodes c JOIN tree ON c.parent_id=tree.id
+      ) SELECT id FROM tree)`);
+      params.push(String(query.locationId));
+    }
+    const rows = this.database.db.prepare(`${nodeSelect} n
+      WHERE ${where.join(" AND ")} ORDER BY n.created_at DESC,n.id DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit + 1, offset) as any[];
+    return {
+      items: rows.slice(0, limit).map((node) => {
+        const specifications = this.specificationsForNode(node.id);
+        const categories = this.categoriesForNode(node.id);
+        return {
+          ...serializeNode(this.database.db, node),
+          categoryId: categories[0]?.id ?? null,
+          category: categories[0] ?? null,
+          categories,
+          specification: specifications.map((item) => item.name).join(" / ") || null,
+          specifications,
+          tags: this.tagsForNode(node.id),
+          images: this.media.listForNode(node.id),
+        };
+      }),
       nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null,
     };
   }
@@ -403,6 +503,72 @@ export class NodeService {
     this.database.db.prepare(`INSERT INTO operation_targets(operation_id,node_id,code_snapshot,directly_operated,before_snapshot,after_snapshot)
       VALUES(?,?,?,?,?,?)`).run(id, node.id, node.code, directly ? 1 : 0, JSON.stringify(before ?? {}), JSON.stringify(after ?? {}));
     return id;
+  }
+
+  private placeInitialContent(
+    requestId: string,
+    userId: string,
+    target: ReturnType<typeof getNode>,
+    input: NonNullable<CreateNodeInput["initialContent"]>,
+    now: number,
+  ): string {
+    const source = getNode(this.database.db, input.nodeId);
+    invariant(source.type !== "WAREHOUSE", "INVALID_PARENT_TYPE", "仓库不能放入其他位置");
+    invariant(source.stockStatus === "IN_STOCK", "INVALID_STATE", "只有在库对象可以放入新位置");
+    invariant(
+      source.locationVersion === input.expectedLocationVersion &&
+        locationToken(this.database.db, source.id) === input.locationToken,
+      "LOCATION_CHANGED",
+      "待放入对象的位置已变化",
+      {
+        nodeId: source.id,
+        currentVersion: source.locationVersion,
+        currentPath: getPath(this.database.db, source.id),
+      },
+    );
+    const descendants = getDescendants(this.database.db, source.id);
+    invariant(descendants.length <= 5000, "VALIDATION_ERROR", "单次操作展开后不能超过 5000 个节点");
+    if (source.type !== "ITEM") {
+      invariant(Boolean(input.subtreeToken), "VALIDATION_ERROR", "容器操作必须携带子树令牌");
+      invariant(
+        subtreeToken(this.database.db, source.id) === input.subtreeToken,
+        "SUBTREE_CHANGED",
+        "待放入容器的内容已变化",
+        { nodeId: source.id },
+      );
+    }
+    validateParent(source.type, target);
+
+    const before = descendants.map((entry) => snapshotNode(this.database.db, entry));
+    this.database.db.prepare(
+      "UPDATE nodes SET parent_id=?,location_version=location_version+1,updated_at=? WHERE id=?",
+    ).run(target.id, now, source.id);
+
+    const operationId = randomUUID();
+    this.database.db.prepare(`INSERT INTO operation_logs(id,request_id,actor_id,client_kind,action,subject_type,subject_id,reason,reverses_operation_id,summary,created_at)
+      VALUES(?,?,?,?,?,'BATCH',NULL,NULL,NULL,?,?)`).run(
+      operationId,
+      requestId,
+      userId,
+      "WEB",
+      "MOVE",
+      `MOVE 1 个直接对象到 ${target.code}`,
+      now,
+    );
+    const insertTarget = this.database.db.prepare(`INSERT INTO operation_targets(operation_id,node_id,code_snapshot,directly_operated,before_snapshot,after_snapshot)
+      VALUES(?,?,?,?,?,?)`);
+    descendants.forEach((previous, index) => {
+      const current = getNode(this.database.db, previous.id);
+      insertTarget.run(
+        operationId,
+        current.id,
+        current.code,
+        index === 0 ? 1 : 0,
+        JSON.stringify(before[index]),
+        JSON.stringify(snapshotNode(this.database.db, current)),
+      );
+    });
+    return operationId;
   }
 
   private countContents(nodeId: string): { directContainers: number; directItems: number; recursiveItems: number } {

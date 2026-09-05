@@ -84,6 +84,12 @@ export const CreateNodeSchema = z.object({
   createMode: z.enum(["STAGE", "PLACE"]),
   targetId: IdSchema.optional(),
   targetLocationToken: z.string().min(1).optional(),
+  initialContent: z.object({
+    nodeId: IdSchema,
+    expectedLocationVersion: z.number().int().positive(),
+    locationToken: z.string().min(1),
+    subtreeToken: z.string().min(1).optional(),
+  }).optional(),
 }).superRefine((value, context) => {
   if (value.type === "ITEM" && value.categoryIds.length === 0 && !value.categoryId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["categoryIds"], message: "物品必须至少选择一个分类" });
@@ -99,6 +105,9 @@ export const CreateNodeSchema = z.object({
   }
   if (value.createMode === "PLACE" && !value.targetLocationToken) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["targetLocationToken"], message: "放置模式必须携带目标位置令牌" });
+  }
+  if (value.type === "ITEM" && value.initialContent) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["initialContent"], message: "物品不能包含其他档案" });
   }
 });
 export type CreateNodeInput = z.infer<typeof CreateNodeSchema>;
