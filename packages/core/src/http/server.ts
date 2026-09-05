@@ -16,6 +16,7 @@ import {
 } from "@inventory-hub/contracts";
 import { loadConfig, type InventoryConfigInput } from "../config.js";
 import { InventoryDatabase } from "../db/database.js";
+import { SCHEMA_VERSION } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { AuthService } from "../services/auth.js";
 import { IdempotencyService, type RequestIdentity } from "../services/idempotency.js";
@@ -99,7 +100,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     try {
       const quickCheck = database.quickCheck();
       if (quickCheck !== "ok") return reply.status(503).send(failure("DB_UNAVAILABLE", "数据库完整性检查未通过", request.id, true));
-      return success({ status: "ready", schemaVersion: 1, sqliteVersion: database.sqliteVersion, dataRevision: database.dataRevision }, request.id);
+      return success({ status: "ready", schemaVersion: SCHEMA_VERSION, sqliteVersion: database.sqliteVersion, dataRevision: database.dataRevision }, request.id);
     } catch { return reply.status(503).send(failure("DB_UNAVAILABLE", "数据库尚未就绪", request.id, true)); }
   });
   app.get("/api/v1/setup/status", async (request) => success({
@@ -432,7 +433,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   app.get("/api/v1/cleanup-jobs", async (request) => success({ items: database.db.prepare(`SELECT id,kind,state,attempts,next_attempt_at nextAttemptAt,last_error lastError,created_at createdAt,updated_at updatedAt
     FROM cleanup_jobs ORDER BY created_at DESC LIMIT 100`).all().map((row: any) => ({ ...row, nextAttemptAt: new Date(row.nextAttemptAt).toISOString(), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() })) }, request.id));
   app.post("/api/v1/cleanup-jobs/run", async (request) => success({ processed: await media.processCleanupJobs() }, request.id));
-  app.get("/api/v1/settings/runtime", async (request) => success({ appMode: config.appMode, host: config.host, port: config.port, protocol: publicHttps ? "https" : config.protocol, serviceProtocol: config.protocol, secureContext, sqliteVersion: database.sqliteVersion, schemaVersion: 1, dataRevision: database.dataRevision, lanEnabled: Boolean(config.lanOrigin), url: config.lanOrigin }, request.id));
+  app.get("/api/v1/settings/runtime", async (request) => success({ appMode: config.appMode, host: config.host, port: config.port, protocol: publicHttps ? "https" : config.protocol, serviceProtocol: config.protocol, secureContext, sqliteVersion: database.sqliteVersion, schemaVersion: SCHEMA_VERSION, dataRevision: database.dataRevision, lanEnabled: Boolean(config.lanOrigin), url: config.lanOrigin }, request.id));
 
   if (config.staticRoot) registerStaticSpa(app, config.staticRoot);
   app.setNotFoundHandler((request, reply) => {

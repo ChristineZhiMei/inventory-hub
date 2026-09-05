@@ -308,11 +308,8 @@ export class NodeService {
     invariant(uniqueCategories.every((id) => Boolean(findCategory.get(id))), "VALIDATION_ERROR", "包含不存在的分类");
     const uniqueTags = [...new Set(tagIds)];
     invariant(uniqueTags.length === tagIds.length, "VALIDATION_ERROR", "标签不能重复");
-    if (uniqueTags.length) {
-      const placeholders = uniqueTags.map(() => "?").join(",");
-      const count = (this.database.db.prepare(`SELECT count(*) count FROM tags WHERE id IN (${placeholders})`).get(...uniqueTags) as any).count;
-      invariant(count === uniqueTags.length, "VALIDATION_ERROR", "包含不存在的标签");
-    }
+    const findTag = this.database.db.prepare("SELECT 1 FROM tags WHERE id=?");
+    invariant(uniqueTags.every((id) => Boolean(findTag.get(id))), "VALIDATION_ERROR", "包含不存在的标签");
     const uniqueSpecifications = [...new Set(specificationIds)];
     invariant(uniqueSpecifications.length === specificationIds.length, "VALIDATION_ERROR", "规格不能重复");
     const findSpecification = this.database.db.prepare("SELECT 1 FROM specifications WHERE id=?");
