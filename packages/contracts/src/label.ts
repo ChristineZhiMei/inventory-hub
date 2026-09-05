@@ -41,16 +41,21 @@ export function renderLabelHtml(
 * { box-sizing: border-box; }
 html, body { width: ${widthMm}mm; height: ${heightMm}mm; margin: 0; overflow: hidden; }
 body { color: #000; background: #fff; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif; }
-main { width: 100%; height: 100%; padding: ${marginMm}mm; display: flex; flex-direction: column; justify-content: center; gap: .65mm; }
-.meta { width: 100%; min-width: 0; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; font-size: 7pt; font-weight: 600; line-height: 1.15; }
-.line { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-img { display: block; align-self: center; width: 100%; height: 10mm; object-fit: fill; flex-shrink: 0; }
+main { width: 100%; height: 100%; padding: ${marginMm}mm; display: flex; flex-direction: column; }
+.meta { width: 100%; min-width: 0; overflow: hidden; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; font-size: 7pt; font-weight: 600; line-height: 1.15; text-align: left; }
+.line { width: 100%; overflow-wrap: anywhere; }
+.barcode { width: 100%; flex-shrink: 0; margin-top: auto; text-align: center; }
+.barcode img { display: block; width: 100%; height: 9mm; object-fit: fill; }
+.code { margin-top: .35mm; font: 600 6pt/1.05 Arial, sans-serif; letter-spacing: .2mm; white-space: nowrap; }
 </style></head><body><main>
 <div class="meta">
 <div class="line">名称：${escapeHtml(label.name || "—")}</div>
 <div class="line">规格：${escapeHtml(label.specifications?.map((item) => item.name).join("/") || "—")}</div>
 <div class="line">分类：${escapeHtml(label.categories?.map((item) => item.name).join("、") || "—")}</div>
 </div>
+<div class="barcode">
 <img alt="${escapeHtml(label.code)}" src="${escapeHtml(barcodeSource)}">
+<div class="code">${escapeHtml(label.code)}</div>
+</div>
 </main></body></html>`;
 }
