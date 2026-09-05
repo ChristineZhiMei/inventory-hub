@@ -75,8 +75,9 @@ export const CreateNodeSchema = z.object({
   type: NodeTypeSchema,
   name: NameSchema,
   notes: NotesSchema.optional().default(""),
-  tagIds: z.array(IdSchema).max(20).default([]),
+  tagIds: z.array(IdSchema).default([]),
   categoryId: IdSchema.optional(),
+  categoryIds: z.array(IdSchema).max(3).default([]),
   specification: z.string().trim().max(500).optional().default(""),
   specificationIds: z.array(IdSchema).default([]),
   uploadIds: z.array(IdSchema).max(5).default([]),
@@ -84,8 +85,8 @@ export const CreateNodeSchema = z.object({
   targetId: IdSchema.optional(),
   targetLocationToken: z.string().min(1).optional(),
 }).superRefine((value, context) => {
-  if (value.type === "ITEM" && !value.categoryId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["categoryId"], message: "物品必须选择分类" });
+  if (value.type === "ITEM" && value.categoryIds.length === 0 && !value.categoryId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["categoryIds"], message: "物品必须至少选择一个分类" });
   }
   if (value.type === "ITEM" && value.uploadIds.length === 0) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["uploadIds"], message: "物品至少需要一张图片" });
@@ -111,8 +112,9 @@ export const PatchProfileSchema = z.object({
   expectedVersion: z.number().int().positive(),
   name: NameSchema.optional(),
   notes: NotesSchema.optional(),
-  tagIds: z.array(IdSchema).max(20).optional(),
+  tagIds: z.array(IdSchema).optional(),
   categoryId: IdSchema.optional(),
+  categoryIds: z.array(IdSchema).max(3).optional(),
   specification: z.string().trim().max(500).optional(),
   specificationIds: z.array(IdSchema).optional(),
   images: z.array(ImageSetEntrySchema).min(0).max(5).optional(),

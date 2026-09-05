@@ -58,6 +58,7 @@ export interface InventoryNode {
   isSystemStaging?: boolean;
   categoryId?: string | null;
   category?: Category | null;
+  categories?: Category[];
   specification?: string | null;
   specifications?: Specification[];
   tags?: Tag[];
@@ -155,6 +156,10 @@ export interface PrintJob {
     copyIndex: number;
     payloadSnapshot?: {
       paper?: { widthMm: number; heightMm: number; marginMm: number };
+      node?: {
+        categories?: Array<{ id?: string; name: string }>;
+        specifications?: Array<{ id?: string; name: string }>;
+      };
     };
     error?: string;
   }>;

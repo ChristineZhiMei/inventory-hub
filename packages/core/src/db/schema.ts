@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -51,6 +51,13 @@ CREATE TABLE IF NOT EXISTS item_profiles (
   specification TEXT NOT NULL DEFAULT '' CHECK(length(specification) <= 500)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS item_profiles_category ON item_profiles(category_id, node_id);
+CREATE TABLE IF NOT EXISTS node_categories (
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+  sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0),
+  PRIMARY KEY(node_id, category_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS node_categories_category ON node_categories(category_id, node_id);
 CREATE TABLE IF NOT EXISTS node_tags (
   node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,

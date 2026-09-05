@@ -28,14 +28,20 @@ export class NodeService {
           invariant(locationToken(this.database.db, parent.id) === input.targetLocationToken, "LOCATION_CHANGED", "目标位置已变化");
         }
       }
-      this.validateTaxonomy(input.categoryId, input.tagIds, input.specificationIds, input.type);
+      const categoryIds = input.categoryIds.length
+        ? input.categoryIds
+        : input.categoryId
+          ? [input.categoryId]
+          : [];
+      this.validateTaxonomy(categoryIds, input.tagIds, input.specificationIds, input.type);
       this.database.db.prepare(`INSERT INTO nodes(id,code,type,parent_id,stock_status,name,notes,version,location_version,is_system_staging,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,1,1,0,?,?)`).run(reservation.nodeId, reservation.code, input.type, parentId,
         input.type === "WAREHOUSE" ? null : "IN_STOCK", normalizeName(input.name), input.notes ?? "", now, now);
       if (input.type === "ITEM") this.database.db.prepare("INSERT INTO item_profiles(node_id,category_id,specification) VALUES(?,?,?)")
-        .run(reservation.nodeId, input.categoryId, "");
+        .run(reservation.nodeId, categoryIds[0], "");
+      this.replaceCategories(reservation.nodeId, categoryIds, input.type);
       this.replaceTags(reservation.nodeId, input.tagIds);
-      if (input.type === "ITEM") this.replaceSpecifications(reservation.nodeId, input.specificationIds);
+      this.replaceSpecifications(reservation.nodeId, input.specificationIds);
       this.media.insertPrepared(reservation.nodeId, prepared);
       this.database.db.prepare("UPDATE code_reservations SET state='ACTIVE',updated_at=? WHERE code=?").run(now, reservation.code);
       const node = getNode(this.database.db, reservation.nodeId);
@@ -64,12 +70,12 @@ export class NodeService {
       invariant(node.version === input.expectedVersion, "VERSION_CONFLICT", "档案已被修改", { currentVersion: node.version });
       const before = snapshotNode(this.database.db, node);
       const now = Date.now();
-      if (input.categoryId !== undefined) invariant(node.type === "ITEM", "VALIDATION_ERROR", "只有物品可设置分类");
-      this.validateTaxonomy(input.categoryId, input.tagIds ?? [], input.specificationIds ?? [], node.type, input.categoryId === undefined);
+      const categoryIds = input.categoryIds ?? (input.categoryId ? [input.categoryId] : []);
+      const categoriesUnchanged = input.categoryIds === undefined && input.categoryId === undefined;
+      this.validateTaxonomy(categoryIds, input.tagIds ?? [], input.specificationIds ?? [], node.type, categoriesUnchanged);
       this.database.db.prepare(`UPDATE nodes SET name=COALESCE(?,name),notes=COALESCE(?,notes),version=version+1,updated_at=? WHERE id=?`)
         .run(input.name === undefined ? null : normalizeName(input.name), input.notes ?? null, now, nodeId);
-      if (node.type === "ITEM") this.database.db.prepare(`UPDATE item_profiles SET category_id=COALESCE(?,category_id) WHERE node_id=?`)
-        .run(input.categoryId ?? null, nodeId);
+      if (!categoriesUnchanged) this.replaceCategories(nodeId, categoryIds, node.type);
       if (input.tagIds) this.replaceTags(nodeId, input.tagIds);
       if (input.specificationIds) this.replaceSpecifications(nodeId, input.specificationIds);
       if (input.images) this.replaceImages(node, input.images, prepared);
@@ -120,13 +126,15 @@ export class NodeService {
     const node = getNode(this.database.db, nodeId);
     const itemProfile = node.type === "ITEM" ? this.database.db.prepare(`SELECT p.category_id categoryId,p.specification,c.name categoryName
       FROM item_profiles p JOIN categories c ON c.id=p.category_id WHERE p.node_id=?`).get(nodeId) : null;
+    const categories = this.categoriesForNode(nodeId);
     const tags = this.database.db.prepare(`SELECT t.id,t.name,t.version FROM tags t JOIN node_tags nt ON nt.tag_id=t.id WHERE nt.node_id=? ORDER BY t.name`).all(nodeId);
     const specifications = this.specificationsForNode(nodeId);
     return {
       ...serializeNode(this.database.db, node),
       itemProfile,
-      categoryId: (itemProfile as any)?.categoryId ?? null,
-      category: itemProfile ? { id: (itemProfile as any).categoryId, name: (itemProfile as any).categoryName } : null,
+      categoryId: categories[0]?.id ?? null,
+      category: categories[0] ?? null,
+      categories,
       specification: specifications.map((item) => item.name).join(" / ") || null,
       specifications,
       tags,
@@ -154,12 +162,13 @@ export class NodeService {
       where.push(`(n.code LIKE ? OR n.name LIKE ?
         OR EXISTS(SELECT 1 FROM node_tags qnt JOIN tags qt ON qt.id=qnt.tag_id WHERE qnt.node_id=n.id AND qt.name LIKE ?)
         OR EXISTS(SELECT 1 FROM node_specifications qns JOIN specifications qs ON qs.id=qns.specification_id WHERE qns.node_id=n.id AND qs.name LIKE ?)
-        OR EXISTS(SELECT 1 FROM categories qc WHERE qc.id=p.category_id AND qc.name LIKE ?))`);
+        OR EXISTS(SELECT 1 FROM node_categories qnc JOIN categories qc ON qc.id=qnc.category_id WHERE qnc.node_id=n.id AND qc.name LIKE ?))`);
       params.push(pattern, pattern, pattern, pattern, pattern);
     }
     if (query.status) { where.push("n.stock_status=?"); params.push(String(query.status)); }
     if (query.categoryId) {
-      where.push(`p.category_id IN (WITH RECURSIVE cats(id) AS (SELECT id FROM categories WHERE id=? UNION ALL SELECT c.id FROM categories c JOIN cats ON c.parent_id=cats.id) SELECT id FROM cats)`);
+      where.push(`EXISTS(SELECT 1 FROM node_categories fnc WHERE fnc.node_id=n.id AND fnc.category_id IN
+        (WITH RECURSIVE cats(id) AS (SELECT id FROM categories WHERE id=? UNION ALL SELECT c.id FROM categories c JOIN cats ON c.parent_id=cats.id) SELECT id FROM cats))`);
       params.push(String(query.categoryId));
     }
     const tagIds = queryList(query.tagIds);
@@ -179,7 +188,8 @@ export class NodeService {
     const hasMore = rows.length > limit;
     return { items: rows.slice(0, limit).map((node) => {
       const specifications = this.specificationsForNode(node.id);
-      return { ...serializeNode(this.database.db, node), categoryId: node.categoryId, specification: specifications.map((item) => item.name).join(" / ") || null, specifications, tags: this.tagsForNode(node.id), images: this.media.listForNode(node.id) };
+      const categories = this.categoriesForNode(node.id);
+      return { ...serializeNode(this.database.db, node), categoryId: categories[0]?.id ?? null, category: categories[0] ?? null, categories, specification: specifications.map((item) => item.name).join(" / ") || null, specifications, tags: this.tagsForNode(node.id), images: this.media.listForNode(node.id) };
     }), nextCursor: hasMore ? encodeCursor(offset + limit) : null };
   }
 
@@ -289,8 +299,13 @@ export class NodeService {
     });
   }
 
-  private validateTaxonomy(categoryId: string | undefined, tagIds: string[], specificationIds: string[], type: NodeType, categoryUnchanged = false): void {
-    if (type === "ITEM" && !categoryUnchanged) invariant(Boolean(categoryId && this.database.db.prepare("SELECT 1 FROM categories WHERE id=?").get(categoryId)), "VALIDATION_ERROR", "分类不存在");
+  private validateTaxonomy(categoryIds: string[], tagIds: string[], specificationIds: string[], type: NodeType, categoryUnchanged = false): void {
+    const uniqueCategories = [...new Set(categoryIds)];
+    invariant(uniqueCategories.length === categoryIds.length, "VALIDATION_ERROR", "分类不能重复");
+    invariant(uniqueCategories.length <= 3, "VALIDATION_ERROR", "每个档案最多选择三个分类");
+    if (type === "ITEM" && !categoryUnchanged) invariant(uniqueCategories.length > 0, "VALIDATION_ERROR", "物品必须至少选择一个分类");
+    const findCategory = this.database.db.prepare("SELECT 1 FROM categories WHERE id=?");
+    invariant(uniqueCategories.every((id) => Boolean(findCategory.get(id))), "VALIDATION_ERROR", "包含不存在的分类");
     const uniqueTags = [...new Set(tagIds)];
     invariant(uniqueTags.length === tagIds.length, "VALIDATION_ERROR", "标签不能重复");
     if (uniqueTags.length) {
@@ -300,7 +315,6 @@ export class NodeService {
     }
     const uniqueSpecifications = [...new Set(specificationIds)];
     invariant(uniqueSpecifications.length === specificationIds.length, "VALIDATION_ERROR", "规格不能重复");
-    invariant(type === "ITEM" || uniqueSpecifications.length === 0, "VALIDATION_ERROR", "只有物品可以设置规格");
     const findSpecification = this.database.db.prepare("SELECT 1 FROM specifications WHERE id=?");
     invariant(uniqueSpecifications.every((id) => Boolean(findSpecification.get(id))), "VALIDATION_ERROR", "包含不存在的规格");
   }
@@ -309,6 +323,23 @@ export class NodeService {
     this.database.db.prepare("DELETE FROM node_tags WHERE node_id=?").run(nodeId);
     const insert = this.database.db.prepare("INSERT INTO node_tags(node_id,tag_id) VALUES(?,?)");
     [...new Set(tagIds)].forEach((tagId) => insert.run(nodeId, tagId));
+  }
+
+  private replaceCategories(nodeId: string, categoryIds: string[], type: NodeType): void {
+    invariant(type !== "ITEM" || categoryIds.length > 0, "VALIDATION_ERROR", "物品必须至少选择一个分类");
+    this.database.db.prepare("DELETE FROM node_categories WHERE node_id=?").run(nodeId);
+    const insert = this.database.db.prepare(`INSERT INTO node_categories(node_id,category_id,sort_order)
+      VALUES(?,?,?)`);
+    [...new Set(categoryIds)].forEach((categoryId, index) => insert.run(nodeId, categoryId, index));
+    if (type === "ITEM") {
+      this.database.db.prepare("UPDATE item_profiles SET category_id=? WHERE node_id=?").run(categoryIds[0], nodeId);
+    }
+  }
+
+  private categoriesForNode(nodeId: string): any[] {
+    return this.database.db.prepare(`SELECT c.id,c.name,c.parent_id parentId,c.version FROM categories c
+      JOIN node_categories nc ON nc.category_id=c.id
+      WHERE nc.node_id=? ORDER BY nc.sort_order,c.name,c.id`).all(nodeId);
   }
 
   private tagsForNode(nodeId: string): any[] {
@@ -372,7 +403,9 @@ export class NodeService {
 
   private categorySummary(nodeId: string): any[] {
     return this.database.db.prepare(`WITH RECURSIVE tree(id) AS (SELECT id FROM nodes WHERE parent_id=? UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent_id=t.id)
-      SELECT c.id,c.name,count(DISTINCT p.node_id) itemCount FROM tree t JOIN item_profiles p ON p.node_id=t.id JOIN categories c ON c.id=p.category_id GROUP BY c.id,c.name ORDER BY itemCount DESC,c.name`).all(nodeId);
+      SELECT c.id,c.name,count(DISTINCT nc.node_id) itemCount FROM tree t
+      JOIN node_categories nc ON nc.node_id=t.id JOIN categories c ON c.id=nc.category_id
+      GROUP BY c.id,c.name ORDER BY itemCount DESC,c.name`).all(nodeId);
   }
 }
 

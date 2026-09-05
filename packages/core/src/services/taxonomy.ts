@@ -9,7 +9,7 @@ export class TaxonomyService {
 
   categories(): any[] {
     const rows = this.database.db.prepare(`SELECT c.id,c.parent_id parentId,c.name,c.version,c.created_at createdAt,c.updated_at updatedAt,
-      (SELECT count(*) FROM item_profiles p WHERE p.category_id=c.id) referenceCount,
+      (SELECT count(*) FROM node_categories nc WHERE nc.category_id=c.id) referenceCount,
       (SELECT count(*) FROM categories child WHERE child.parent_id=c.id) childCount FROM categories c ORDER BY c.parent_scope_key,c.name`).all() as any[];
     return rows.map((row) => ({ ...row, referenceToken: this.categoryReferenceToken(row.id), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() }));
   }
@@ -58,7 +58,7 @@ export class TaxonomyService {
       const current = this.getCategory(id);
       invariant(current.version === expectedVersion, "VERSION_CONFLICT", "分类已被修改");
       const children = (this.database.db.prepare("SELECT count(*) count FROM categories WHERE parent_id=?").get(id) as any).count;
-      const references = (this.database.db.prepare("SELECT count(*) count FROM item_profiles WHERE category_id=?").get(id) as any).count;
+      const references = (this.database.db.prepare("SELECT count(*) count FROM node_categories WHERE category_id=?").get(id) as any).count;
       invariant(children === 0 && references === 0, "REFERENCE_CONFLICT", "分类仍有子分类或物品引用", { childCount: children, referenceCount: references });
       this.database.db.prepare("DELETE FROM categories WHERE id=?").run(id);
       this.log(identity, "CATEGORY_DELETE", "CATEGORY", id, current, { deleted: true });
@@ -71,10 +71,20 @@ export class TaxonomyService {
       const source = this.getCategory(sourceId);
       this.getCategory(input.targetCategoryId);
       invariant(source.version === input.expectedVersion, "VERSION_CONFLICT", "分类已被修改");
-      const nodes = this.database.db.prepare("SELECT node_id nodeId FROM item_profiles WHERE category_id=? ORDER BY node_id").all(sourceId) as any[];
+      const nodes = this.database.db.prepare(`SELECT node_id nodeId,sort_order sortOrder FROM node_categories
+        WHERE category_id=? ORDER BY node_id`).all(sourceId) as Array<{ nodeId: string; sortOrder: number }>;
       invariant(nodes.length <= 5000, "REFERENCE_CONFLICT", "引用数量超过单次迁移上限");
       invariant(nodes.length === input.previewCount && this.categoryReferenceToken(sourceId) === input.referenceToken, "REFERENCE_CONFLICT", "分类引用已变化");
-      this.database.db.prepare("UPDATE item_profiles SET category_id=? WHERE category_id=?").run(input.targetCategoryId, sourceId);
+      const attach = this.database.db.prepare(`INSERT OR IGNORE INTO node_categories(node_id,category_id,sort_order)
+        VALUES(?,?,?)`);
+      const detach = this.database.db.prepare("DELETE FROM node_categories WHERE node_id=? AND category_id=?");
+      const updateLegacy = this.database.db.prepare(`UPDATE item_profiles SET category_id=?
+        WHERE node_id=? AND category_id=?`);
+      nodes.forEach(({ nodeId, sortOrder }) => {
+        attach.run(nodeId, input.targetCategoryId, sortOrder);
+        detach.run(nodeId, sourceId);
+        updateLegacy.run(input.targetCategoryId, nodeId, sourceId);
+      });
       if (nodes.length) {
         const update = this.database.db.prepare("UPDATE nodes SET version=version+1,updated_at=? WHERE id=?");
         nodes.forEach(({ nodeId }) => update.run(Date.now(), nodeId));
@@ -237,7 +247,7 @@ export class TaxonomyService {
   }
 
   private categoryReferenceToken(id: string): string {
-    const ids = this.database.db.prepare("SELECT node_id nodeId FROM item_profiles WHERE category_id=? ORDER BY node_id").all(id);
+    const ids = this.database.db.prepare("SELECT node_id nodeId FROM node_categories WHERE category_id=? ORDER BY node_id").all(id);
     return hash(ids);
   }
 

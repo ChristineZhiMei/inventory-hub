@@ -41,6 +41,7 @@ export class InventoryDatabase {
 
   private migrate(): void {
     this.db.exec(schemaSql);
+    this.migrateLegacyCategories();
     this.migrateLegacySpecifications();
     const now = Date.now();
     this.db.prepare("INSERT OR IGNORE INTO code_sequences(prefix,next_value) VALUES ('W',1),('C',1),('I',1)").run();
@@ -89,6 +90,11 @@ export class InventoryDatabase {
         attach.run(row.nodeId, specification.id);
       }
     })();
+  }
+
+  private migrateLegacyCategories(): void {
+    this.db.prepare(`INSERT OR IGNORE INTO node_categories(node_id,category_id,sort_order)
+      SELECT node_id,category_id,0 FROM item_profiles`).run();
   }
 
   nextCode(prefix: "W" | "C" | "I"): string {

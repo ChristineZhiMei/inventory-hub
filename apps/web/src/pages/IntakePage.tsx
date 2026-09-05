@@ -80,7 +80,7 @@ export function IntakePage() {
         body: {
           type: "ITEM",
           name: values.name,
-          categoryId: values.categoryId,
+          categoryIds: values.categoryIds,
           specificationIds: values.specificationIds,
           notes: values.notes || undefined,
           tagIds: values.tagIds,

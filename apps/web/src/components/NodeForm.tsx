@@ -12,13 +12,13 @@ import { ImageManager, type EditableImage } from "./ImageManager";
 
 const schema = z.object({
   name: z.string().trim().min(1, "请输入名称").max(120, "名称最多 120 个字符"),
-  categoryId: z.string().optional(),
+  categoryIds: z.array(z.string()).max(3, "每个档案最多选择三个分类"),
   specificationIds: z.array(z.string()),
   notes: z.string().max(2000, "备注最多 2000 个字符").optional(),
   targetId: z.string().optional(),
   targetLocationToken: z.string().optional(),
   createMode: z.enum(["STAGE", "PLACE"]),
-  tagIds: z.array(z.string()).max(20),
+  tagIds: z.array(z.string()),
 });
 export type NodeFormData = z.infer<typeof schema>;
 
@@ -54,7 +54,6 @@ export function NodeForm({
   const categories = useQuery({
     queryKey: ["categories"],
     queryFn: queries.categories,
-    enabled: type === "ITEM",
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
   const specifications = useInfiniteQuery({
@@ -67,7 +66,6 @@ export function NodeForm({
     },
     initialPageParam: "",
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    enabled: type === "ITEM",
   });
   const locations = useQuery({
     queryKey: ["locations", "all"],
@@ -80,7 +78,11 @@ export function NodeForm({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initial?.name || "",
-      categoryId: initial?.categoryId || initial?.category?.id || "",
+      categoryIds:
+        initial?.categories?.map((category) => category.id) ||
+        (initial?.categoryId || initial?.category?.id
+          ? [initial.categoryId || initial.category!.id]
+          : []),
       specificationIds: initial?.specifications?.map((item) => item.id) || [],
       notes: initial?.notes || "",
       targetId: defaultTargetId,
@@ -162,7 +164,7 @@ export function NodeForm({
       }
       const uniqueIds = [...new Set(selectedIds)];
       if (kind === "tag") {
-        form.setValue("tagIds", uniqueIds.slice(0, 20), {
+        form.setValue("tagIds", uniqueIds, {
           shouldDirty: true,
           shouldValidate: true,
         });
@@ -192,8 +194,8 @@ export function NodeForm({
 
   async function submit(values: NodeFormData) {
     form.clearErrors();
-    if (type === "ITEM" && !values.categoryId) {
-      form.setError("categoryId", { message: "物品必须选择分类" });
+    if (type === "ITEM" && values.categoryIds.length === 0) {
+      form.setError("categoryIds", { message: "物品必须至少选择一个分类" });
       return;
     }
     const usableImages = images.filter(
@@ -273,36 +275,35 @@ export function NodeForm({
               }
             />
           </Field>
-          {type === "ITEM" && (
-            <Field
-              label="主分类"
-              htmlFor="categoryId"
-              error={form.formState.errors.categoryId?.message}
-              required
-            >
-              <Select
-                id="categoryId"
-                name="categoryId"
-                value={form.watch("categoryId") || ""}
-                aria-invalid={!!form.formState.errors.categoryId}
-                onChange={(event) =>
-                  form.setValue("categoryId", event.target.value, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-              >
-                <option value="">选择分类</option>
-                {pageItems(categories.data).map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          {type === "ITEM" && (
-            <Field
+          <Field
+            label="分类"
+            error={form.formState.errors.categoryIds?.message}
+            hint="最多选择三个分类"
+            required={type === "ITEM"}
+          >
+            <AntSelect
+              mode="multiple"
+              value={form.watch("categoryIds")}
+              options={pageItems(categories.data).map((category) => ({
+                value: category.id,
+                label: category.name,
+              }))}
+              placeholder="选择分类"
+              size="large"
+              className="w-full"
+              optionFilterProp="label"
+              maxCount={3}
+              maxTagCount="responsive"
+              onChange={(values) =>
+                form.setValue("categoryIds", values, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              allowClear
+            />
+          </Field>
+          <Field
               label="规格"
               error={form.formState.errors.specificationIds?.message}
               hint="可选择历史规格；输入新规格后按回车即可创建并添加"
@@ -336,13 +337,12 @@ export function NodeForm({
                 tokenSeparators={[",", "，"]}
                 allowClear
               />
-            </Field>
-          )}
+          </Field>
           <Field
             label="标签"
             error={form.formState.errors.tagIds?.message}
-            hint="输入新标签后按回车即可创建并添加，最多选择 20 个"
-            className={type === "ITEM" ? "" : "md:col-span-2"}
+            hint="输入新标签后按回车即可创建并添加"
+            className="md:col-span-2"
           >
             <AntSelect
               mode="tags"
@@ -354,7 +354,6 @@ export function NodeForm({
               optionFilterProp="label"
               onChange={(values) => void updateCreatableSelection("tag", values)}
               loading={tags.isLoading || creatingTaxonomy === "tag"}
-              maxCount={20}
               maxTagCount="responsive"
               tokenSeparators={[",", "，"]}
               allowClear

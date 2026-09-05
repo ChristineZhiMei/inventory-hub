@@ -278,11 +278,11 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
 
   app.get("/api/v1/categories", async (request) => success(taxonomy.categories(), request.id));
   app.post("/api/v1/categories", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(120), parentId: z.string().uuid().optional() }).parse(request.body);
+    const body = z.object({ name: z.string().trim().min(1).max(3), parentId: z.string().uuid().optional() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createCategory(identity, body)), writeRequestId(request));
   });
   app.patch<{ Params: { id: string } }>("/api/v1/categories/:id", async (request) => {
-    const body = z.object({ expectedVersion: z.number().int().positive(), name: z.string().trim().min(1).max(120).optional(), parentId: z.string().uuid().nullable().optional() }).parse(request.body);
+    const body = z.object({ expectedVersion: z.number().int().positive(), name: z.string().trim().min(1).max(3).optional(), parentId: z.string().uuid().nullable().optional() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.patchCategory(identity, request.params.id, body)), writeRequestId(request));
   });
   app.delete<{ Params: { id: string } }>("/api/v1/categories/:id", async (request) => {

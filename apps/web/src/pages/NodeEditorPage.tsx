@@ -39,7 +39,7 @@ export function NodeEditorPage({
             type,
             name: values.name,
             notes: values.notes || undefined,
-            categoryId: type === "ITEM" ? values.categoryId : undefined,
+            categoryIds: values.categoryIds,
             specificationIds:
               type === "ITEM" ? values.specificationIds : undefined,
             tagIds: values.tagIds,
@@ -62,7 +62,7 @@ export function NodeEditorPage({
           expectedVersion: detail.data!.version,
           name: values.name,
           notes: values.notes || "",
-          categoryId: type === "ITEM" ? values.categoryId : undefined,
+          categoryIds: values.categoryIds,
           specificationIds:
             type === "ITEM" ? values.specificationIds : undefined,
           tagIds: values.tagIds,

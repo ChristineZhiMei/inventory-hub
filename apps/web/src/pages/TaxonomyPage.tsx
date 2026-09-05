@@ -315,7 +315,7 @@ export function TaxonomyPage() {
             tab === "categories"
               ? "物品建档必须选择一个分类，可以建立最多 5 层分类树。"
               : tab === "tags"
-                ? "标签可关联物品、袋子、箱子和仓库，每个档案最多 20 个。"
+                ? "标签可关联物品、袋子、箱子和仓库，不限制关联数量。"
                 : "创建过的规格会保留在这里，之后建档时可以搜索并复用。"
           }
         />
@@ -344,7 +344,7 @@ export function TaxonomyPage() {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              maxLength={120}
+              maxLength={editing?.kind === "category" ? 3 : 120}
               autoFocus
             />
           </Field>
