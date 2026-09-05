@@ -379,14 +379,8 @@ body {
   margin-bottom: 0;
 
   .ant-form-item-label {
-    flex: none;
     padding-bottom: 6px;
     text-align: start;
-  }
-
-  .ant-form-item-row {
-    display: flex;
-    flex-direction: column;
   }
 
   .ant-form-item-control {

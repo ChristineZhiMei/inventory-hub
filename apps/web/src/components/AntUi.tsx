@@ -234,11 +234,13 @@ export function Field({
   return (
     <Form.Item
       className={cn("app-field", className)}
+      layout="vertical"
       label={label}
       htmlFor={controlId}
       required={required}
       validateStatus={error ? "error" : undefined}
-      help={error || hint}
+      help={error}
+      extra={hint}
     >
       {control}
     </Form.Item>
