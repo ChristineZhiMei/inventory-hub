@@ -60,6 +60,7 @@ export function NodeDetailPage() {
   const [printOpen, setPrintOpen] = useState(false);
   const [executorId, setExecutorId] = useState("");
   const [confirmCode, setConfirmCode] = useState("");
+  const [lastPrintJobId, setLastPrintJobId] = useState("");
   const detail = useQuery({
     queryKey: ["node", id],
     queryFn: () => queries.node(id!),
@@ -110,7 +111,7 @@ export function NodeDetailPage() {
     },
     onSuccess: (job) => {
       setPrintOpen(false);
-      navigate(`/print-jobs/${job.id}`);
+      setLastPrintJobId(job.id);
     },
   });
   const deleteMutation = useMutation({
@@ -210,6 +211,19 @@ export function NodeDetailPage() {
       {printMutation.error && (
         <Alert title="无法创建打印任务" tone="error" className="mb-4">
           {errorMessage(printMutation.error)}
+        </Alert>
+      )}
+      {lastPrintJobId && (
+        <Alert title="打印任务已创建" tone="success" className="mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>当前页面会保持不变，可以继续操作。</span>
+            <Link
+              to={`/print-jobs/${lastPrintJobId}`}
+              className="font-medium text-primary hover:underline"
+            >
+              查看打印任务
+            </Link>
+          </div>
         </Alert>
       )}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -410,7 +424,12 @@ export function NodeDetailPage() {
               <CardTitle>档案编号</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <CodeLabel code={node.code} name={node.name} />
+              <CodeLabel
+                code={node.code}
+                name={node.name}
+                categories={node.categories}
+                specifications={node.specifications}
+              />
             </CardContent>
           </Card>
           <Card>
@@ -425,10 +444,18 @@ export function NodeDetailPage() {
                     <TypeName type={node.type} />
                   </dd>
                 </div>
-                {node.category && (
+                {(node.categories?.length || node.category) && (
                   <div>
                     <dt className="text-muted-foreground">分类</dt>
-                    <dd className="mt-1 font-medium">{node.category.name}</dd>
+                    <dd className="mt-2 flex flex-wrap gap-1">
+                      {node.categories?.length
+                        ? node.categories.map((category) => (
+                            <Badge key={category.id} variant="outline">
+                              {category.name}
+                            </Badge>
+                          ))
+                        : node.category?.name}
+                    </dd>
                   </div>
                 )}
                 {(node.specifications?.length || node.specification) && (

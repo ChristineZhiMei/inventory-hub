@@ -66,6 +66,8 @@ export interface PrintLabelRequest {
     code: string;
     name: string;
     type: PrintableNodeType;
+    categories?: Array<{ id?: string; name: string }>;
+    specifications?: Array<{ id?: string; name: string }>;
   };
   paper: {
     widthMm: number;

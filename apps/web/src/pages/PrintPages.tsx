@@ -367,7 +367,13 @@ export function PrintJobDetailPage() {
                 <CardTitle>标签预览</CardTitle>
               </CardHeader>
               <CardContent className="overflow-x-auto">
-                <CodeLabel code={job.items[0].code} name={job.items[0].name} paper={job.items[0].payloadSnapshot?.paper} />
+                <CodeLabel
+                  code={job.items[0].code}
+                  name={job.items[0].name}
+                  categories={job.items[0].payloadSnapshot?.node?.categories}
+                  specifications={job.items[0].payloadSnapshot?.node?.specifications}
+                  paper={job.items[0].payloadSnapshot?.paper}
+                />
               </CardContent>
             </Card>
           )}{" "}

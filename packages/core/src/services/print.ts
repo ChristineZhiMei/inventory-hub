@@ -39,7 +39,16 @@ export class PrintService {
         invariant(Boolean(executor && executor.state !== "REVOKED"), "EXECUTOR_OFFLINE", "打印执行器不存在或已撤销");
         invariant(executor!.state === "ONLINE" && executor!.lastSeenAt >= Date.now() - EXECUTOR_ONLINE_WINDOW_MS, "EXECUTOR_OFFLINE", "打印执行器已离线，请先恢复执行器心跳");
       }
-      const nodes = input.nodeIds.map((id) => getNode(this.database.db, id));
+      const nodes = input.nodeIds.map((id) => {
+        const node = getNode(this.database.db, id);
+        const categories = this.database.db.prepare(`SELECT c.id,c.name FROM categories c
+          JOIN node_categories nc ON nc.category_id=c.id WHERE nc.node_id=?
+          ORDER BY nc.sort_order,c.name,c.id`).all(id);
+        const specifications = this.database.db.prepare(`SELECT s.id,s.name FROM specifications s
+          JOIN node_specifications ns ON ns.specification_id=s.id WHERE ns.node_id=?
+          ORDER BY ns.sort_order,s.name,s.id`).all(id);
+        return { ...node, categories, specifications };
+      });
       invariant(nodes.length * input.copies <= 2000, "VALIDATION_ERROR", "打印子任务不能超过 2000 张");
       const id = randomUUID();
       const now = Date.now();
@@ -52,7 +61,14 @@ export class PrintService {
         for (let copyIndex = 1; copyIndex <= input.copies; copyIndex += 1) {
           ordinal += 1;
           insert.run(randomUUID(), id, ordinal, node.id, copyIndex, JSON.stringify({
-            node: { id: node.id, code: node.code, name: node.name, type: node.type },
+            node: {
+              id: node.id,
+              code: node.code,
+              name: node.name,
+              type: node.type,
+              categories: node.categories,
+              specifications: node.specifications,
+            },
             copyIndex,
             templateId: input.templateId,
             templateVersion: 1,

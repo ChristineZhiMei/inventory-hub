@@ -18,7 +18,16 @@ function escapeHtml(value: string): string {
 }
 
 // Screen preview and Electron printing consume this exact document.
-export function renderLabelHtml(label: { code: string; name?: string | undefined }, paper: LabelPaper, barcodeSource: string): string {
+export function renderLabelHtml(
+  label: {
+    code: string;
+    name?: string | undefined;
+    specifications?: Array<{ name: string }> | undefined;
+    categories?: Array<{ name: string }> | undefined;
+  },
+  paper: LabelPaper,
+  barcodeSource: string,
+): string {
   const { widthMm, heightMm, marginMm } = paper;
   if (![widthMm, heightMm, marginMm].every(Number.isFinite) || widthMm <= 0 || heightMm <= 0 || marginMm < 0) {
     throw new Error("INVALID_LABEL_PAPER");
@@ -32,13 +41,16 @@ export function renderLabelHtml(label: { code: string; name?: string | undefined
 * { box-sizing: border-box; }
 html, body { width: ${widthMm}mm; height: ${heightMm}mm; margin: 0; overflow: hidden; }
 body { color: #000; background: #fff; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif; }
-main { width: 100%; height: 100%; padding: ${marginMm}mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; }
-img { display: block; width: 100%; height: 10mm; object-fit: fill; flex-shrink: 0; }
-.code { max-width: 100%; white-space: nowrap; font: 700 10pt 'Courier New', monospace; }
-.name { max-width: 100%; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; font-size: 9pt; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main { width: 100%; height: 100%; padding: ${marginMm}mm; display: flex; flex-direction: column; justify-content: center; gap: .65mm; }
+.meta { width: 100%; min-width: 0; font-family: 'PingFang SC', 'Hiragino Sans GB', 'STHeiti', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; font-size: 7pt; font-weight: 600; line-height: 1.15; }
+.line { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+img { display: block; align-self: center; width: 100%; height: 10mm; object-fit: fill; flex-shrink: 0; }
 </style></head><body><main>
+<div class="meta">
+<div class="line">名称：${escapeHtml(label.name || "—")}</div>
+<div class="line">规格：${escapeHtml(label.specifications?.map((item) => item.name).join("/") || "—")}</div>
+<div class="line">分类：${escapeHtml(label.categories?.map((item) => item.name).join("、") || "—")}</div>
+</div>
 <img alt="${escapeHtml(label.code)}" src="${escapeHtml(barcodeSource)}">
-<div class="code">${escapeHtml(label.code)}</div>
-${label.name ? `<div class="name">${escapeHtml(label.name)}</div>` : ""}
 </main></body></html>`;
 }
