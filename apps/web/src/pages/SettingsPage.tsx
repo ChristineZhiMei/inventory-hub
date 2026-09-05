@@ -457,6 +457,10 @@ function LanSettings() {
   const port = Number(lanUrl?.port || service.port || location.port || (protocol === "https" ? 443 : 80));
   const certificateInstallUrl = desktop?.certificateInstallUrl;
   const httpsReady = lanEnabled && protocol === "https" && Boolean(lanOrigin);
+  const secureDevelopmentOrigin = location.port === "14237" && host
+    ? `https://${host}:14239`
+    : null;
+  const currentPageTrusted = window.isSecureContext;
   const copyInstallUrl = async () => {
     if (!certificateInstallUrl) return;
     try {
@@ -490,8 +494,8 @@ function LanSettings() {
             <InfoBox label="主机" value={host} />
             <InfoBox label="服务端口" value={String(port)} />
             <InfoBox
-              label="相机安全上下文"
-              value={httpsReady ? "HTTPS 可申请" : "不可用"}
+              label="当前页面安全状态"
+              value={currentPageTrusted ? "浏览器已认可" : "浏览器未认可"}
             />
           </dl>
           {lanOrigin && (
@@ -513,6 +517,26 @@ function LanSettings() {
             >
               先在桌面端生成局域网证书，再在手机上安装公开证书并核对指纹。普通
               http://192.168.x.x 无法获得相机权限。
+            </Alert>
+          )}
+          {secureDevelopmentOrigin && (
+            <Alert
+              title="手机开发测试请使用 HTTPS 入口"
+              tone="info"
+              className="mt-4"
+            >
+              <p>
+                当前 14237 是电脑端 HTTP 开发地址，安装证书后也不会变成安全页面。
+              </p>
+              <a
+                href={secureDevelopmentOrigin}
+                className="mt-3 inline-flex min-h-11 items-center gap-2 font-medium text-primary hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {secureDevelopmentOrigin}
+                <ExternalLink className="size-4" />
+              </a>
             </Alert>
           )}
         </CardContent>
@@ -555,8 +579,9 @@ function LanSettings() {
                   </div>
                 )}
                 <Alert title="安装后仍需确认信任" tone="info">
-                  iPhone 或 iPad 安装描述文件后，还需在“设置 → 通用 → 关于本机 →
-                  证书信任设置”中开启完全信任。Android 的入口因系统厂商而异。
+                  iPhone 或 iPad 显示“已安装描述文件”并不等于已信任。还需在“设置 →
+                  通用 → 关于本机 → 证书信任设置”中开启 Inventory Hub Local CA
+                  的完全信任，随后彻底关闭并重新打开浏览器。Android 的入口因系统厂商而异。
                 </Alert>
               </div>
             </div>

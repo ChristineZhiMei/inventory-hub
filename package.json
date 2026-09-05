@@ -12,6 +12,7 @@
     "dev": "pnpm --parallel --filter @inventory-hub/core --filter @inventory-hub/web dev",
     "dev:core": "pnpm --filter @inventory-hub/core dev",
     "dev:web": "pnpm --filter @inventory-hub/web dev",
+    "dev:web:secure": "pnpm --filter @inventory-hub/web dev:secure",
     "dev:desktop": "pnpm --filter @inventory-hub/desktop dev",
     "dev:server": "pnpm --filter @inventory-hub/server dev",
     "start:server": "pnpm --filter @inventory-hub/server start",

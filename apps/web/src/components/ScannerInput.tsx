@@ -23,7 +23,15 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
     void Promise.resolve(onCode(normalized)).catch((error) => setCameraError(errorMessage(error)));
   }
   async function startCamera() {
-    if (!window.isSecureContext) { setCameraError("当前页面不是可信 HTTPS，浏览器不会开放摄像头。请改用手动输入。 "); return; }
+    if (!window.isSecureContext) {
+      const secureDevelopmentUrl = location.port === "14237"
+        ? `https://${location.hostname}:14239${location.pathname}`
+        : "";
+      setCameraError(location.protocol !== "https:"
+        ? `当前使用的是 HTTP 页面，安装证书不会改变 HTTP 的安全级别。${secureDevelopmentUrl ? `开发测试请改用 ${secureDevelopmentUrl}。` : "请从设置中的局域网 HTTPS 地址进入。"}`
+        : "当前 HTTPS 证书尚未被浏览器信任。iPhone/iPad 请在“设置 → 通用 → 关于本机 → 证书信任设置”中开启 Inventory Hub Local CA 的完全信任，然后彻底关闭并重新打开浏览器。");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) { setCameraError("此浏览器不支持实时摄像头扫码，请改用手动输入。 "); return; }
     setCameraError(""); setCameraOn(true);
   }
