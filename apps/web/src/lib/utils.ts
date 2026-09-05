@@ -46,7 +46,9 @@ export const operationActionLabels: Record<string, string> = {
 
 export function formatOperationSummary(action: string, summary: string) {
   const label = operationActionLabels[action];
-  return label && summary.startsWith(action)
-    ? `${label}${summary.slice(action.length)}`
-    : summary;
+  if (!label || !summary.startsWith(action)) return summary;
+  const detail = summary.slice(action.length).trim();
+  const legacyTaxonomyId = /^(CATEGORY|TAG|SPECIFICATION)_/.test(action)
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(detail);
+  return legacyTaxonomyId ? label : `${label}${detail ? ` ${detail}` : ""}`;
 }

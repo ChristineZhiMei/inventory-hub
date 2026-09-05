@@ -89,7 +89,7 @@ export class TaxonomyService {
         const update = this.database.db.prepare("UPDATE nodes SET version=version+1,updated_at=? WHERE id=?");
         nodes.forEach(({ nodeId }) => update.run(Date.now(), nodeId));
       }
-      this.log(identity, "CATEGORY_REASSIGN", "CATEGORY", sourceId, { sourceId, nodes }, { targetCategoryId: input.targetCategoryId, nodes });
+      this.log(identity, "CATEGORY_REASSIGN", "CATEGORY", sourceId, { sourceId, name: source.name, nodes }, { targetCategoryId: input.targetCategoryId, name: source.name, nodes });
       return { sourceId, targetCategoryId: input.targetCategoryId, reassignedCount: nodes.length };
     });
   }
@@ -263,12 +263,17 @@ export class TaxonomyService {
   }
 
   private log(identity: RequestIdentity, action: string, subjectType: string, subjectId: string, before: unknown, after: unknown): void {
+    const displayName = taxonomyName(after) || taxonomyName(before) || subjectId;
     this.database.db.prepare(`INSERT INTO operation_logs(id,request_id,actor_id,client_kind,action,subject_type,subject_id,before_snapshot,after_snapshot,summary,created_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), identity.requestId, identity.userId, "WEB", action, subjectType, subjectId,
-      before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, `${action} ${subjectId}`, Date.now());
+      before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, `${action} ${displayName}`, Date.now());
   }
 }
 
+const taxonomyName = (value: unknown): string => {
+  if (!value || typeof value !== "object" || !("name" in value)) return "";
+  return typeof value.name === "string" ? value.name : "";
+};
 const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const encodeCursor = (offset: number): string => Buffer.from(JSON.stringify({ offset }), "utf8").toString("base64url");
 const decodeCursor = (cursor: unknown): number => {
