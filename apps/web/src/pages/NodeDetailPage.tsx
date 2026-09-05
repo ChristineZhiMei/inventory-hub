@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dropdown, Image, Table } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -66,6 +66,12 @@ export function NodeDetailPage() {
   const [confirmCode, setConfirmCode] = useState("");
   const [lastPrintJobId, setLastPrintJobId] = useState("");
   const [addContentsOpen, setAddContentsOpen] = useState(false);
+  const [printCoolingDown, setPrintCoolingDown] = useState(false);
+  const printLockRef = useRef(false);
+  const printCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (printCooldownTimerRef.current) clearTimeout(printCooldownTimerRef.current);
+  }, []);
   const detail = useQuery({
     queryKey: ["node", id],
     queryFn: () => queries.node(id!),
@@ -126,6 +132,18 @@ export function NodeDetailPage() {
       setLastPrintJobId(job.id);
     },
   });
+  function submitPrint(remote?: { executorId: string; printerId: string }) {
+    if (printLockRef.current || printMutation.isPending) return;
+    printLockRef.current = true;
+    setPrintCoolingDown(true);
+    if (printCooldownTimerRef.current) clearTimeout(printCooldownTimerRef.current);
+    printCooldownTimerRef.current = setTimeout(() => {
+      printLockRef.current = false;
+      setPrintCoolingDown(false);
+      printCooldownTimerRef.current = null;
+    }, 2_000);
+    printMutation.mutate(remote);
+  }
   const deleteMutation = useMutation({
     mutationFn: () =>
       api(`/nodes/${id}`, {
@@ -241,13 +259,13 @@ export function NodeDetailPage() {
               onClick={() =>
                 capabilities.data?.deploymentMode === "server"
                   ? setPrintOpen(true)
-                  : printMutation.mutate(undefined)
+                  : submitPrint(undefined)
               }
               loading={printMutation.isPending}
-              disabled={capabilities.isLoading || capabilities.isError}
+              disabled={capabilities.isLoading || capabilities.isError || printCoolingDown}
             >
               <Printer className="size-4" />
-              打印标签
+              {printCoolingDown && !printMutation.isPending ? "请稍候" : "打印标签"}
             </Button>
           </>
         }
@@ -661,11 +679,11 @@ export function NodeDetailPage() {
             </Button>
             <Button
               loading={printMutation.isPending}
-              disabled={!selectedExecutor || !selectedPrinter}
+              disabled={!selectedExecutor || !selectedPrinter || printCoolingDown}
               onClick={() =>
                 selectedExecutor &&
                 selectedPrinter &&
-                printMutation.mutate({
+                submitPrint({
                   executorId: selectedExecutor.id,
                   printerId: selectedPrinter,
                 })

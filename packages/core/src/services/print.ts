@@ -10,10 +10,12 @@ import type { IdempotencyService, RequestIdentity } from "./idempotency.js";
 
 const EXECUTOR_ONLINE_WINDOW_MS = 90_000;
 const PAIRING_RATE_WINDOW_MS = 10 * 60_000;
+const PRINT_CREATE_DEBOUNCE_MS = 2_000;
 
 export class PrintService {
   private readonly pairingCreateAttempts = new Map<string, number[]>();
   private readonly pairingClaimAttempts = new Map<string, number[]>();
+  private readonly recentPrintCreates = new Map<string, { jobId: string; expiresAt: number }>();
 
   constructor(
     private readonly database: InventoryDatabase,
@@ -29,7 +31,19 @@ export class PrintService {
   create(identity: RequestIdentity, input: PrintCreateInput): any {
     const replay = this.idempotency.lookup(identity);
     if (replay) return replay;
-    return this.database.transaction(() => {
+    const debounceKey = printCreateDebounceKey(identity.userId, input);
+    const recent = this.recentPrintCreates.get(debounceKey);
+    if (recent && recent.expiresAt > Date.now()) {
+      return this.database.transaction(() => {
+        const repeated = this.idempotency.lookup(identity);
+        if (repeated) return repeated;
+        const value = this.detail(recent.jobId, false);
+        this.idempotency.persistSuccess(identity, value);
+        return value;
+      });
+    }
+    if (recent) this.recentPrintCreates.delete(debounceKey);
+    const value = this.database.transaction(() => {
       const repeated = this.idempotency.lookup(identity);
       if (repeated) return repeated;
       if (input.executorId === "local-simulator") invariant(this.simulator, "EXECUTOR_OFFLINE", "当前未启用本机打印模拟器");
@@ -85,6 +99,8 @@ export class PrintService {
       this.idempotency.persistSuccess(identity, value);
       return value;
     });
+    this.rememberPrintCreate(debounceKey, value.id);
+    return value;
   }
 
   list(query: Record<string, unknown>): any {
@@ -421,6 +437,18 @@ export class PrintService {
     }
   }
 
+  private rememberPrintCreate(key: string, jobId: string): void {
+    const now = Date.now();
+    this.recentPrintCreates.set(key, {
+      jobId,
+      expiresAt: now + PRINT_CREATE_DEBOUNCE_MS,
+    });
+    if (this.recentPrintCreates.size <= 500) return;
+    for (const [entryKey, entry] of this.recentPrintCreates) {
+      if (entry.expiresAt <= now) this.recentPrintCreates.delete(entryKey);
+    }
+  }
+
   private getItem(itemId: string): any {
     const row = this.database.db.prepare(`SELECT id,job_id jobId,ordinal,state,attempt_count attemptCount,claim_token claimToken,
       acknowledged_unknown acknowledgedUnknown,updated_at updatedAt FROM print_items WHERE id=?`).get(itemId) as any;
@@ -468,6 +496,15 @@ export class PrintService {
 }
 
 const digestToken = (value: string): string => createHash("sha256").update(value).digest("hex");
+const printCreateDebounceKey = (userId: string, input: PrintCreateInput): string =>
+  createHash("sha256").update(JSON.stringify({
+    userId,
+    executorId: input.executorId,
+    printerId: input.printerId,
+    nodeIds: [...input.nodeIds].sort(),
+    templateId: input.templateId,
+    copies: input.copies,
+  })).digest("hex");
 const parseCapabilities = (value: string): Record<string, unknown> => {
   try {
     const parsed = JSON.parse(value) as unknown;
