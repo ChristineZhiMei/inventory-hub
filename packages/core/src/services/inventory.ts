@@ -37,7 +37,7 @@ export class InventoryService {
     return {
       action: input.action,
       target: target ? snapshotNode(this.database.db, target) : null,
-      targetLocationToken: target ? locationToken(this.database.db, target.id) : null,
+      ...(target ? { targetLocationToken: locationToken(this.database.db, target.id) } : {}),
       roots,
       targets,
       affectedCount: targets.reduce((sum, item) => sum + item.affectedNodeCount, 0),

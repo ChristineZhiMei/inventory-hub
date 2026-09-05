@@ -134,7 +134,9 @@ export function IntakePage() {
         body: {
           action,
           targetId,
-          targetLocationToken: preview.targetLocationToken,
+          ...(preview.targetLocationToken
+            ? { targetLocationToken: preview.targetLocationToken }
+            : {}),
           targets: nodes.map((node) => ({
             nodeId: node.id,
             expectedLocationVersion: node.locationVersion,

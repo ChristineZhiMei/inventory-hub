@@ -118,7 +118,9 @@ export function InventoryActionDialog({
             subtreeToken: node.subtreeToken,
           })),
           targetId: targetId || undefined,
-          targetLocationToken: preview?.targetLocationToken,
+          ...(preview?.targetLocationToken
+            ? { targetLocationToken: preview.targetLocationToken }
+            : {}),
           reason: reason || undefined,
           reversesOperationId,
         },
