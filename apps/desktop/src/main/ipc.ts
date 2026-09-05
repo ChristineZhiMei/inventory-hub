@@ -6,14 +6,15 @@ import { createServer } from "node:net";
 import { accessSync, constants, lstatSync, realpathSync, statfsSync } from "node:fs";
 import type { DesktopConfigStore, DesktopRuntimeConfig } from "./config";
 import { listPrinterSummaries, printLabel } from "./printing";
+import { applyAndPublishPrintPreferences } from "./native-print-settings";
 import type { CoreServiceSupervisor } from "./service-supervisor";
 import type {
   DesktopEnvironment,
   LanConfigurationResult,
   ManagedPathKind,
   MediaDirectoryValidation,
+  LocalPrintPreferences,
   PrintLabelRequest,
-  PrinterSummary,
   SelectedDirectory,
 } from "../shared/contracts";
 
@@ -138,11 +139,38 @@ export function registerDesktopIpc(options: {
     },
   );
 
-  handle("desktop:list-printers", async (): Promise<PrinterSummary[]> => {
-    const window = getMainWindow();
-    if (!window) throw new Error("WINDOW_UNAVAILABLE");
-    return listPrinterSummaries(window);
-  });
+  handle("desktop:get-print-preferences", (): LocalPrintPreferences =>
+    configStore.getPrintPreferences(),
+  );
+
+  handle(
+    "desktop:set-print-preferences",
+    async (_event, preferences: LocalPrintPreferences): Promise<LocalPrintPreferences> => {
+      if (!preferences || typeof preferences !== "object")
+        throw new Error("INVALID_PRINT_PREFERENCES");
+      if (!preferences.printerId) throw new Error("PRINTER_REQUIRED");
+      if (!new Set(["40x30", "50x30"]).has(preferences.paper))
+        throw new Error("INVALID_PRINT_PAPER");
+      if (!new Set(["Enter", "Tab"]).has(preferences.terminator))
+        throw new Error("INVALID_SCANNER_TERMINATOR");
+      const window = getMainWindow();
+      if (!window) throw new Error("WINDOW_UNAVAILABLE");
+      const printers = await listPrinterSummaries(window);
+      if (!printers.some((printer) => printer.name === preferences.printerId))
+        throw new Error("PRINTER_NOT_FOUND");
+      const settings = await applyAndPublishPrintPreferences({
+        window,
+        configStore,
+        service,
+        preferences,
+      });
+      return {
+        ...(settings.printerId ? { printerId: settings.printerId } : {}),
+        paper: settings.paper,
+        terminator: settings.terminator,
+      };
+    },
+  );
 
   handle("desktop:print-label", async (_event, request: PrintLabelRequest) => {
     const window = getMainWindow();

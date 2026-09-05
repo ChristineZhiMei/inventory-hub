@@ -25,6 +25,10 @@ import { MediaService } from "../services/media.js";
 import { NodeService } from "../services/nodes.js";
 import { PrintService } from "../services/print.js";
 import { TaxonomyService } from "../services/taxonomy.js";
+import {
+  getNativePrintSettings,
+  requestNativePrintPreferences,
+} from "../native-print-settings.js";
 
 interface RequestAuth { userId: string; username: string; sessionId: string; csrfToken: string; expiresAt: string; rawToken: string }
 
@@ -322,6 +326,23 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   });
 
   app.get("/api/v1/print-jobs", async (request) => success(printing.list(request.query as any), request.id));
+  app.get("/api/v1/print-native/settings", async (request) => {
+    if (config.appMode !== "desktop") {
+      throw new AppError("DESKTOP_ONLY", "本机打印设置只适用于 Electron 桌面服务");
+    }
+    return success(getNativePrintSettings(), request.id);
+  });
+  app.put("/api/v1/print-native/settings", async (request) => {
+    if (config.appMode !== "desktop") {
+      throw new AppError("DESKTOP_ONLY", "本机打印设置只适用于 Electron 桌面服务");
+    }
+    const body = z.object({
+      printerId: z.string().trim().min(1).max(256),
+      paper: z.enum(["40x30", "50x30"]),
+      terminator: z.enum(["Enter", "Tab"]),
+    }).parse(request.body);
+    return success(requestNativePrintPreferences(body), request.id);
+  });
   app.post("/api/v1/print-jobs", async (request) => {
     const body = PrintCreateSchema.parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => printing.create(identity, body)), writeRequestId(request));

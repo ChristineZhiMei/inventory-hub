@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { DesktopConfigStore, type DesktopRuntimeConfig } from "./config";
 import { registerDesktopIpc } from "./ipc";
 import { LanCertificatePortal, LanHttpsGateway } from "./lan-gateway";
+import { applyAndPublishPrintPreferences } from "./native-print-settings";
 import { SafeStorageRemoteCredentialStore } from "./remote-credential-store";
 import { registerRemotePrintIpc } from "./remote-ipc";
 import { RemotePrintExecutor } from "./remote-print-executor";
@@ -23,6 +24,7 @@ const RESTART_WINDOW_MS = 10 * 60 * 1_000;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let config: DesktopRuntimeConfig | null = null;
+let desktopConfigStore: DesktopConfigStore | null = null;
 let coreService: CoreServiceSupervisor | null = null;
 let lanGateway: LanHttpsGateway | null = null;
 let certificatePortal: LanCertificatePortal | null = null;
@@ -104,11 +106,21 @@ function registerApplicationEvents(): void {
 async function bootstrap(): Promise<void> {
   app.setAppLogsPath();
   const store = new DesktopConfigStore();
+  desktopConfigStore = store;
   config = store.loadRuntimeConfig();
   store.ensureRuntimeDirectories(config);
 
   coreService = new CoreServiceSupervisor(config);
   coreService.onUnexpectedExit(() => scheduleServiceRestart());
+  coreService.onPrintPreferencesRequested((preferences) => {
+    if (!mainWindow || !coreService || mainWindow.isDestroyed()) return;
+    void applyAndPublishPrintPreferences({
+      window: mainWindow,
+      configStore: store,
+      service: coreService,
+      preferences,
+    }).catch((error) => appendDiagnostic("Unable to apply print preferences", error));
+  });
   if (config.mode === "desktop") {
     await coreService.start();
     if (config.lanEnabled) {
@@ -161,6 +173,13 @@ async function bootstrap(): Promise<void> {
   }
   createTray();
   await loadApplication(mainWindow, config.webUrl);
+  if (config.mode === "desktop") {
+    await applyAndPublishPrintPreferences({
+      window: mainWindow,
+      configStore: store,
+      service: coreService!,
+    }).catch((error) => appendDiagnostic("Unable to publish print settings", error));
+  }
 }
 
 function createMainWindow(runtime: DesktopRuntimeConfig): BrowserWindow {
@@ -321,6 +340,13 @@ function scheduleServiceRestart(): void {
       await coreService?.start(attempt + 1);
       if (mainWindow && !mainWindow.isDestroyed() && config) {
         await loadApplication(mainWindow, config.webUrl);
+        if (config.mode === "desktop" && desktopConfigStore && coreService) {
+          await applyAndPublishPrintPreferences({
+            window: mainWindow,
+            configStore: desktopConfigStore,
+            service: coreService,
+          }).catch((error) => appendDiagnostic("Unable to republish print settings", error));
+        }
       }
     } catch (error) {
       failed = true;

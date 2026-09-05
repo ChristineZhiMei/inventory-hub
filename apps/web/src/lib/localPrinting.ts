@@ -2,8 +2,24 @@ import { api } from "./api";
 
 export interface PrintPreferences {
   printerId: string;
-  paper: string;
+  paper: "40x30" | "50x30";
+  terminator: "Enter" | "Tab";
   native: boolean;
+}
+
+export interface NativePrintSettings {
+  available: boolean;
+  printerId?: string;
+  paper: "40x30" | "50x30";
+  terminator: "Enter" | "Tab";
+  printers: Array<{
+    printerId: string;
+    displayName: string;
+    description: string;
+    isDefault: boolean;
+    status: number;
+  }>;
+  updatedAt: string;
 }
 
 interface NativeClaim {
@@ -30,29 +46,58 @@ interface NativeClaim {
 }
 
 let activeConsumer: Promise<void> | null = null;
+let cachedPreferences: PrintPreferences = {
+  printerId: "",
+  paper: "40x30",
+  terminator: "Enter",
+  native: false,
+};
 
 export function printPreferences(): PrintPreferences {
-  let stored: { printerId?: string; paper?: string } = {};
-  try {
-    stored = JSON.parse(
-      localStorage.getItem("inventory-hub:device-preferences") || "{}",
-    );
-  } catch {
-    /* use safe defaults */
+  return { ...cachedPreferences };
+}
+
+export async function refreshPrintPreferences(): Promise<PrintPreferences> {
+  const bridge = window.inventoryHub;
+  if (!bridge?.getPrintPreferences) return printPreferences();
+  let preferences = await bridge.getPrintPreferences();
+  if (!preferences.printerId && bridge.setPrintPreferences) {
+    const legacy = readLegacyPreferences();
+    if (legacy.printerId && legacy.printerId !== "HPRT-D35-SIMULATOR") {
+      try {
+        preferences = await bridge.setPrintPreferences({
+          printerId: legacy.printerId,
+          paper: legacy.paper === "50x30" ? "50x30" : "40x30",
+          terminator: legacy.terminator === "Tab" ? "Tab" : "Enter",
+        });
+      } catch {
+        // The old browser preference may reference a removed printer.
+      }
+    }
+    localStorage.removeItem("inventory-hub:device-preferences");
   }
-  const printerId = stored.printerId || "HPRT-D35-SIMULATOR";
-  return {
-    printerId,
-    paper: stored.paper || "40x30",
-    native:
-      Boolean(window.inventoryHub?.printLabel) &&
-      printerId !== "HPRT-D35-SIMULATOR",
+  cachedPreferences = {
+    printerId: preferences.printerId || "",
+    paper: preferences.paper,
+    terminator: preferences.terminator,
+    native: Boolean(bridge.printLabel && preferences.printerId),
+  };
+  return printPreferences();
+}
+
+export function rememberPrintPreferences(
+  preferences: Pick<PrintPreferences, "printerId" | "paper" | "terminator">,
+): void {
+  cachedPreferences = {
+    ...preferences,
+    native: Boolean(window.inventoryHub?.printLabel && preferences.printerId),
   };
 }
 
-export function consumeLocalNativeQueue(): Promise<void> {
+export async function consumeLocalNativeQueue(): Promise<void> {
   if (!window.inventoryHub?.printLabel) return Promise.resolve();
-  if (!printPreferences().native)
+  const preference = await refreshPrintPreferences();
+  if (!preference.native)
     return Promise.reject(new Error("请先在设置中选择本机打印机"));
   if (activeConsumer) return activeConsumer;
   activeConsumer = consumeSerially().finally(() => {
@@ -76,7 +121,7 @@ async function consumeSerially() {
     let state: "SUBMITTED" | "FAILED" | "UNKNOWN" = "UNKNOWN";
     let evidence = "桌面打印调用未返回结果";
     try {
-      const preference = printPreferences();
+      const preference = await refreshPrintPreferences();
       const requestedPrinter = item.payload.printerId;
       const result = (await bridge({
         printerName:
@@ -115,5 +160,19 @@ async function consumeSerially() {
       },
     });
     if (state !== "SUBMITTED") return;
+  }
+}
+
+function readLegacyPreferences(): {
+  printerId?: string;
+  paper?: string;
+  terminator?: string;
+} {
+  try {
+    return JSON.parse(
+      localStorage.getItem("inventory-hub:device-preferences") || "{}",
+    );
+  } catch {
+    return {};
   }
 }

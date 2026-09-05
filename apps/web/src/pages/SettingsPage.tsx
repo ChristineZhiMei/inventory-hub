@@ -22,6 +22,10 @@ import {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import {
+  rememberPrintPreferences,
+  type NativePrintSettings,
+} from "@/lib/localPrinting";
 import { queries } from "@/lib/queries";
 import type { PrintPairing } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
@@ -920,42 +924,50 @@ function ServerDeviceSettings() {
 }
 
 function LocalDeviceSettings() {
-  const initial = (() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("inventory-hub:device-preferences") || "{}",
-      );
-    } catch {
-      return {};
-    }
-  })() as { printerId?: string; paper?: string; terminator?: string };
-  const [printerId, setPrinterId] = useState(
-    initial.printerId || "HPRT-D35-SIMULATOR",
-  );
-  const [paper, setPaper] = useState(initial.paper || "40x30");
-  const [terminator, setTerminator] = useState(initial.terminator || "Enter");
-  const [saved, setSaved] = useState(false);
-  const printers = useQuery({
-    queryKey: ["native-printers"],
-    queryFn: () => window.inventoryHub!.listPrinters!(),
-    enabled: !!window.inventoryHub?.listPrinters,
+  const queryClient = useQueryClient();
+  const [printerId, setPrinterId] = useState("");
+  const [paper, setPaper] = useState<"" | "40x30" | "50x30">("");
+  const [terminator, setTerminator] = useState<"" | "Enter" | "Tab">("");
+  const settings = useQuery({
+    queryKey: ["native-print-settings"],
+    queryFn: () => api<NativePrintSettings>("/print-native/settings"),
+    refetchInterval: (query) => query.state.data?.available ? false : 2_000,
     retry: false,
   });
-  const nativePrinters = (printers.data || []) as Array<{
-    name?: string;
-    displayName?: string;
-  }>;
-  function save() {
-    localStorage.setItem(
-      "inventory-hub:device-preferences",
-      JSON.stringify({ printerId, paper, terminator }),
-    );
-    setSaved(true);
-  }
+  const defaultPrinterId =
+    settings.data?.printerId ||
+    settings.data?.printers.find((printer) => printer.isDefault)?.printerId ||
+    settings.data?.printers[0]?.printerId ||
+    "";
+  const selectedPrinterId = printerId || defaultPrinterId;
+  const selectedPaper = paper || settings.data?.paper || "40x30";
+  const selectedTerminator = terminator || settings.data?.terminator || "Enter";
+  const save = useMutation({
+    mutationFn: () =>
+      api<NativePrintSettings>("/print-native/settings", {
+        method: "PUT",
+        body: {
+          printerId: selectedPrinterId,
+          paper: selectedPaper,
+          terminator: selectedTerminator,
+        },
+      }),
+    onSuccess: async (result) => {
+      rememberPrintPreferences({
+        printerId: result.printerId || "",
+        paper: result.paper,
+        terminator: result.terminator,
+      });
+      setPrinterId(result.printerId || "");
+      setPaper(result.paper);
+      setTerminator(result.terminator);
+      await queryClient.invalidateQueries({ queryKey: ["native-print-settings"] });
+    },
+  });
   return (
     <div className="space-y-6">
-      <Alert title="当前使用打印模拟器" tone="warning">
-        HPRT D35 尚未完成实机验证；队列成功不代表实际出纸。
+      <Alert title="打印由 Electron 执行" tone="info">
+        此处显示的是运行后端的电脑可访问的打印机。手机和普通浏览器只负责选择设备、创建任务，不会读取当前浏览器所在设备。
       </Alert>
       <Card>
         <CardHeader>
@@ -968,48 +980,54 @@ function LocalDeviceSettings() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="打印机">
               <Select
-                value={printerId}
+                value={selectedPrinterId}
                 onChange={(e) => setPrinterId(e.target.value)}
+                disabled={!settings.data?.available || settings.isLoading}
               >
-                <option value="HPRT-D35-SIMULATOR">HPRT D35 模拟器</option>
-                {nativePrinters.map((printer, index) => {
-                  const name =
-                    printer.name || printer.displayName || `printer-${index}`;
-                  return (
-                    <option value={name} key={name}>
-                      {printer.displayName || name}
-                    </option>
-                  );
-                })}
+                <option value="">选择 Electron 电脑上的打印机</option>
+                {settings.data?.printers.map((printer) => (
+                  <option value={printer.printerId} key={printer.printerId}>
+                    {printer.displayName || printer.printerId}
+                    {printer.isDefault ? "（系统默认）" : ""}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field label="标签纸">
-              <Select value={paper} onChange={(e) => setPaper(e.target.value)}>
+              <Select
+                value={selectedPaper}
+                onChange={(e) => setPaper(e.target.value as "40x30" | "50x30")}
+              >
                 <option value="40x30">40 × 30 mm（待实机确认）</option>
                 <option value="50x30">50 × 30 mm（待实机确认）</option>
               </Select>
             </Field>
             <Field label="扫码枪结束符">
               <Select
-                value={terminator}
-                onChange={(e) => setTerminator(e.target.value)}
+                value={selectedTerminator}
+                onChange={(e) => setTerminator(e.target.value as "Enter" | "Tab")}
               >
                 <option value="Enter">Enter</option>
                 <option value="Tab">Tab</option>
               </Select>
             </Field>
           </div>
-          <Button className="mt-5" onClick={save}>
-            保存当前客户端偏好
+          <Button
+            className="mt-5"
+            onClick={() => save.mutate()}
+            loading={save.isPending}
+            disabled={!settings.data?.available || !selectedPrinterId}
+          >
+            保存 Electron 打印配置
           </Button>
-          {saved && (
-            <Alert title="偏好已保存" tone="success" className="mt-4">
-              这不会把尚未验证的打印机标记为可用。
+          {save.isSuccess && (
+            <Alert title="打印配置已保存" tone="success" className="mt-4">
+              后续从桌面端、手机或其他 Web 页面创建的本机打印任务都会使用这台设备。
             </Alert>
           )}
-          {printers.error && (
-            <Alert title="无法读取系统打印机" tone="error" className="mt-4">
-              {errorMessage(printers.error)}
+          {(settings.error || save.error) && (
+            <Alert title="无法读取或保存打印配置" tone="error" className="mt-4">
+              {errorMessage(settings.error || save.error)}
             </Alert>
           )}
         </CardContent>

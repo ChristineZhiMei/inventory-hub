@@ -3,13 +3,18 @@ import { appendFileSync, existsSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import type { DesktopRuntimeConfig } from "./config";
-import type { ServiceStatus } from "../shared/contracts";
+import type {
+  LocalPrintPreferences,
+  LocalPrintSettings,
+  ServiceStatus,
+} from "../shared/contracts";
 
 const HEALTH_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 10_000;
 
 type StatusListener = (status: ServiceStatus) => void;
 type ExitListener = (exitCode: number) => void;
+type PrintPreferenceListener = (preferences: LocalPrintPreferences) => void;
 
 export class CoreServiceSupervisor {
   private child: Electron.UtilityProcess | null = null;
@@ -17,6 +22,7 @@ export class CoreServiceSupervisor {
   private currentStatus: ServiceStatus;
   private readonly statusListeners = new Set<StatusListener>();
   private exitListener: ExitListener | undefined;
+  private printPreferenceListener: PrintPreferenceListener | undefined;
 
   constructor(private readonly config: DesktopRuntimeConfig) {
     this.currentStatus = this.makeStatus(config.mode === "remote" ? "remote" : "stopped", 0);
@@ -33,6 +39,10 @@ export class CoreServiceSupervisor {
 
   onUnexpectedExit(listener: ExitListener): void {
     this.exitListener = listener;
+  }
+
+  onPrintPreferencesRequested(listener: PrintPreferenceListener): void {
+    this.printPreferenceListener = listener;
   }
 
   async start(attempt = 1): Promise<void> {
@@ -77,6 +87,16 @@ export class CoreServiceSupervisor {
     });
     this.child = child;
     this.pipeServiceLogs(child);
+    child.on("message", (message) => {
+      const payload = ((message as { data?: unknown })?.data ?? message) as Record<string, unknown>;
+      if (
+        payload?.type === "inventory-hub:set-print-preferences" &&
+        payload.preferences &&
+        typeof payload.preferences === "object"
+      ) {
+        this.printPreferenceListener?.(payload.preferences as LocalPrintPreferences);
+      }
+    });
 
     child.once("exit", (code) => {
       const wasExpected = this.expectedStop;
@@ -143,6 +163,16 @@ export class CoreServiceSupervisor {
       token: selection.token,
       path: selection.path,
       expiresAt: selection.expiresAt,
+    });
+  }
+
+  registerLocalPrintSettings(settings: LocalPrintSettings): void {
+    if (!this.child || this.currentStatus.phase !== "ready") {
+      throw new Error("CORE_SERVICE_NOT_READY");
+    }
+    this.child.postMessage({
+      type: "inventory-hub:native-print-settings",
+      settings,
     });
   }
 

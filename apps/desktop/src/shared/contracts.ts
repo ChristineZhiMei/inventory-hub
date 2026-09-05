@@ -57,6 +57,24 @@ export interface PrinterSummary {
   status: number;
 }
 
+export interface LocalPrintPreferences {
+  printerId?: string;
+  paper: "40x30" | "50x30";
+  terminator: "Enter" | "Tab";
+}
+
+export interface LocalPrintSettings extends LocalPrintPreferences {
+  available: boolean;
+  printers: Array<{
+    printerId: string;
+    displayName: string;
+    description: string;
+    isDefault: boolean;
+    status: number;
+  }>;
+  updatedAt: string;
+}
+
 export type PrintableNodeType = "WAREHOUSE" | "BOX" | "BAG" | "ITEM";
 
 export interface PrintLabelRequest {
@@ -134,6 +152,7 @@ export interface InventoryHubDesktopApi {
   validateMediaDirectory(selectionToken: string): Promise<MediaDirectoryValidation>;
   openManagedPath(kind: ManagedPathKind, selectionToken?: string): Promise<void>;
   setLanEnabled(enabled: boolean): Promise<LanConfigurationResult>;
-  listPrinters(): Promise<PrinterSummary[]>;
+  getPrintPreferences(): Promise<LocalPrintPreferences>;
+  setPrintPreferences(preferences: LocalPrintPreferences): Promise<LocalPrintPreferences>;
   printLabel(request: PrintLabelRequest): Promise<PrintLabelResult>;
 }

@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { api, errorMessage } from "@/lib/api";
-import { consumeLocalNativeQueue, printPreferences } from "@/lib/localPrinting";
+import {
+  consumeLocalNativeQueue,
+  type NativePrintSettings,
+} from "@/lib/localPrinting";
 import { pageItems, queries } from "@/lib/queries";
 import type { PrintItemState } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -45,6 +48,10 @@ const stateInfo: Record<
 };
 
 export function PrintJobsPage() {
+  const capabilities = useQuery({
+    queryKey: ["capabilities"],
+    queryFn: queries.capabilities,
+  });
   const query = useQuery({
     queryKey: ["print-jobs"],
     queryFn: queries.printJobs,
@@ -56,21 +63,31 @@ export function PrintJobsPage() {
         : false,
   });
   const jobs = pageItems(query.data);
-  const preference = printPreferences();
+  const nativeSettings = useQuery({
+    queryKey: ["native-print-settings"],
+    queryFn: () => api<NativePrintSettings>("/print-native/settings"),
+    enabled: capabilities.data?.deploymentMode === "desktop",
+    retry: false,
+  });
+  const serverMode = capabilities.data?.deploymentMode === "server";
   return (
     <div>
       <Alert
         title={
-          preference.native
-            ? `本机打印：${preference.printerId}`
-            : "当前使用打印模拟器"
+          serverMode
+            ? "打印由 Electron 执行器处理"
+            : nativeSettings.data?.printerId
+            ? `Electron 打印机：${nativeSettings.data.printerId}`
+            : "Electron 打印机尚未配置"
         }
         tone="warning"
         className="mb-5"
       >
-        {preference.native
+        {serverMode
+          ? "设备列表和打印状态来自后端已配对的 Electron 执行器。"
+          : nativeSettings.data?.printerId
           ? "系统接受打印任务不等于标签已经实际出纸；结果未知时不会自动重发。"
-          : "待打印机配置完成后，在设置中选择系统打印机。"}
+          : "请在设备与打印中，从 Electron 电脑上报的设备列表里选择打印机。"}
       </Alert>
       {query.isLoading ? (
         <div className="space-y-3">

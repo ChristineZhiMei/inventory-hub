@@ -2,6 +2,7 @@ import { app } from "electron";
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ensureLanCertificateBundle } from "./lan-certificate";
+import type { LocalPrintPreferences } from "../shared/contracts";
 
 const DEFAULT_SERVICE_PORT = 18_473;
 
@@ -18,6 +19,7 @@ interface PersistedDesktopConfig {
   caCertPath?: string;
   caFingerprint?: string;
   managedLanCertificate?: boolean;
+  printPreferences?: LocalPrintPreferences;
 }
 
 export interface DesktopRuntimeConfig {
@@ -209,6 +211,16 @@ export class DesktopConfigStore {
     };
   }
 
+  getPrintPreferences(): LocalPrintPreferences {
+    return normalizePrintPreferences(this.readPersisted().printPreferences);
+  }
+
+  setPrintPreferences(preferences: LocalPrintPreferences): LocalPrintPreferences {
+    const normalized = normalizePrintPreferences(preferences);
+    this.save({ ...this.readPersisted(), printPreferences: normalized });
+    return normalized;
+  }
+
   save(config: PersistedDesktopConfig): void {
     mkdirSync(dirname(this.configPath), { recursive: true, mode: 0o700 });
     const temporaryPath = `${this.configPath}.tmp`;
@@ -241,11 +253,26 @@ export class DesktopConfigStore {
         ...(parsed.caCertPath ? { caCertPath: parsed.caCertPath } : {}),
         ...(parsed.caFingerprint ? { caFingerprint: parsed.caFingerprint } : {}),
         ...(typeof parsed.managedLanCertificate === "boolean" ? { managedLanCertificate: parsed.managedLanCertificate } : {}),
+        ...(parsed.printPreferences
+          ? { printPreferences: normalizePrintPreferences(parsed.printPreferences) }
+          : {}),
       };
     } catch (error) {
       throw new Error(`Desktop configuration is invalid: ${String(error)}`);
     }
   }
+}
+
+function normalizePrintPreferences(
+  input?: Partial<LocalPrintPreferences>,
+): LocalPrintPreferences {
+  const printerId = typeof input?.printerId === "string" ? input.printerId.trim() : "";
+  if (printerId.length > 256) throw new Error("INVALID_PRINTER_ID");
+  return {
+    ...(printerId ? { printerId } : {}),
+    paper: input?.paper === "50x30" ? "50x30" : "40x30",
+    terminator: input?.terminator === "Tab" ? "Tab" : "Enter",
+  };
 }
 
 function parseLanOrigin(value: string | undefined, lanPort: number): string {

@@ -13,7 +13,20 @@ interface Window {
     }>;
     validateMediaDirectory?: (token: string) => Promise<unknown>;
     openManagedPath?: (kind: string) => Promise<unknown>;
-    listPrinters?: () => Promise<unknown[]>;
+    getPrintPreferences?: () => Promise<{
+      printerId?: string;
+      paper: "40x30" | "50x30";
+      terminator: "Enter" | "Tab";
+    }>;
+    setPrintPreferences?: (preferences: {
+      printerId?: string;
+      paper: "40x30" | "50x30";
+      terminator: "Enter" | "Tab";
+    }) => Promise<{
+      printerId?: string;
+      paper: "40x30" | "50x30";
+      terminator: "Enter" | "Tab";
+    }>;
     printLabel?: (payload: {
       printerName: string;
       jobName: string;
@@ -21,6 +34,8 @@ interface Window {
         code: string;
         name: string;
         type: "WAREHOUSE" | "BOX" | "BAG" | "ITEM";
+        categories?: Array<{ id?: string; name: string }>;
+        specifications?: Array<{ id?: string; name: string }>;
       };
       paper: {
         widthMm: number;

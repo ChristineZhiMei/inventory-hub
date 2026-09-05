@@ -5,9 +5,9 @@ import type {
   LanConfigurationResult,
   ManagedPathKind,
   MediaDirectoryValidation,
+  LocalPrintPreferences,
   PrintLabelRequest,
   PrintLabelResult,
-  PrinterSummary,
   SelectedDirectory,
   ServiceStatus,
 } from "../shared/contracts";
@@ -31,7 +31,13 @@ const api: InventoryHubDesktopApi = {
     ipcRenderer.invoke("desktop:open-managed-path", kind, selectionToken) as Promise<void>,
   setLanEnabled: (enabled: boolean) =>
     ipcRenderer.invoke("desktop:set-lan-enabled", enabled) as Promise<LanConfigurationResult>,
-  listPrinters: () => ipcRenderer.invoke("desktop:list-printers") as Promise<PrinterSummary[]>,
+  getPrintPreferences: () =>
+    ipcRenderer.invoke("desktop:get-print-preferences") as Promise<LocalPrintPreferences>,
+  setPrintPreferences: (preferences: LocalPrintPreferences) =>
+    ipcRenderer.invoke(
+      "desktop:set-print-preferences",
+      preferences,
+    ) as Promise<LocalPrintPreferences>,
   printLabel: (request: PrintLabelRequest) =>
     ipcRenderer.invoke("desktop:print-label", request) as Promise<PrintLabelResult>,
 };

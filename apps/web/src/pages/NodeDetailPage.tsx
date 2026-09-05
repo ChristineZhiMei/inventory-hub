@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, imageUrl } from "@/lib/api";
-import { consumeLocalNativeQueue, printPreferences } from "@/lib/localPrinting";
+import {
+  consumeLocalNativeQueue,
+  type NativePrintSettings,
+} from "@/lib/localPrinting";
 import { pageItems, queries } from "@/lib/queries";
 import type {
   InventoryAction,
@@ -88,9 +91,14 @@ export function NodeDetailPage() {
     queryFn: queries.printExecutors,
     enabled: printOpen && capabilities.data?.deploymentMode === "server",
   });
+  const nativePrintSettings = useQuery({
+    queryKey: ["native-print-settings"],
+    queryFn: () => api<NativePrintSettings>("/print-native/settings"),
+    enabled: capabilities.data?.deploymentMode === "desktop",
+    retry: false,
+  });
   const printMutation = useMutation({
     mutationFn: async (remote?: { executorId: string; printerId: string }) => {
-      const preference = printPreferences();
       const native =
         !remote && capabilities.data?.deploymentMode === "desktop";
       const job = await api<{ id: string }>("/print-jobs", {
@@ -101,13 +109,9 @@ export function NodeDetailPage() {
             remote?.executorId || (native ? "local-native" : "local-simulator"),
           printerId:
             remote?.printerId ||
-            (native
-              ? window.inventoryHub?.printLabel
-                ? preference.printerId
-                : "local-default"
-              : "HPRT-D35-SIMULATOR"),
+            (native ? "local-default" : "HPRT-D35-SIMULATOR"),
           nodeIds: [id],
-          templateId: `default-${preference.paper}`,
+          templateId: `default-${nativePrintSettings.data?.paper || "40x30"}`,
           copies: 1,
         },
       });
