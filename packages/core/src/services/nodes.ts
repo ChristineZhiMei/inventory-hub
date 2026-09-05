@@ -209,7 +209,14 @@ export class NodeService {
     }
     const rows = this.database.db.prepare(`${nodeSelect} WHERE ${where.join(" AND ")} ORDER BY is_system_staging DESC,created_at DESC,id DESC LIMIT ? OFFSET ?`)
       .all(...params, limit + 1, offset) as any[];
-    return { items: rows.slice(0, limit).map((node) => ({ ...serializeNode(this.database.db, node), counts: this.countContents(node.id) })), nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null };
+    return {
+      items: rows.slice(0, limit).map((node) => ({
+        ...serializeNode(this.database.db, node),
+        counts: this.countContents(node.id),
+        images: this.media.listForNode(node.id),
+      })),
+      nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null,
+    };
   }
 
   contents(nodeId: string, recursive = true, limit = 100, cursor?: unknown, providedTreeToken?: string): any {
@@ -221,8 +228,15 @@ export class NodeService {
     const all = recursive ? getDescendants(this.database.db, nodeId).slice(1) : this.database.db.prepare(`${nodeSelect} WHERE parent_id=? ORDER BY type,code`).all(nodeId) as any[];
     const page = all.slice(offset, offset + Math.min(limit, 100));
     return {
-      root: serializeNode(this.database.db, root),
-      items: page.map((node: any) => ({ ...serializeNode(this.database.db, node), depth: getPath(this.database.db, node.id).length - getPath(this.database.db, root.id).length })),
+      root: {
+        ...serializeNode(this.database.db, root),
+        images: this.media.listForNode(root.id),
+      },
+      items: page.map((node: any) => ({
+        ...serializeNode(this.database.db, node),
+        depth: getPath(this.database.db, node.id).length - getPath(this.database.db, root.id).length,
+        images: this.media.listForNode(node.id),
+      })),
       counts: this.countContents(nodeId),
       categorySummary: this.categorySummary(nodeId),
       treeToken: token,

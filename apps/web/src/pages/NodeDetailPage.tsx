@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Image } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -326,24 +327,25 @@ export function NodeDetailPage() {
               {node.images?.length ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {node.images.map((image, index) => (
-                    <a
-                      href={image.url || imageUrl(image.id, "main")}
-                      target="_blank"
-                      rel="noreferrer"
+                    <div
                       key={image.id}
-                      className="group relative aspect-square overflow-hidden rounded-md bg-muted"
+                      className="node-detail-image group relative aspect-square overflow-hidden rounded-md bg-muted"
                     >
-                      <img
+                      <Image
                         src={image.thumbUrl || image.url || imageUrl(image.id)}
+                        preview={{
+                          src: image.mainUrl || image.url || imageUrl(image.id, "main"),
+                          mask: "查看原图",
+                        }}
                         alt={`${node.name} 图片 ${index + 1}`}
-                        className="size-full object-cover transition-transform group-hover:scale-105"
+                        rootClassName="node-detail-image__preview"
                       />
                       {index === 0 && (
                         <span className="absolute bottom-2 left-2 rounded bg-slate-950/75 px-2 py-1 text-xs text-white">
                           封面
                         </span>
                       )}
-                    </a>
+                    </div>
                   ))}
                 </div>
               ) : (
