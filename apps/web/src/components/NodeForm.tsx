@@ -18,6 +18,7 @@ const schema = z.object({
   targetId: z.string().optional(),
   targetLocationToken: z.string().optional(),
   createMode: z.enum(["STAGE", "PLACE"]),
+  nextCreateType: z.enum(["NONE", "BAG", "BOX", "WAREHOUSE"]),
   tagIds: z.array(z.string()),
 });
 export type NodeFormData = z.infer<typeof schema>;
@@ -25,12 +26,14 @@ export type NodeFormData = z.infer<typeof schema>;
 export function NodeForm({
   type,
   initial,
+  prefill,
   submitLabel = "保存档案",
   onSubmit,
   busy,
 }: {
   type: NodeType;
   initial?: InventoryNode;
+  prefill?: Pick<InventoryNode, "name" | "categories" | "categoryId" | "category" | "tags">;
   submitLabel?: string;
   onSubmit: (
     payload: NodeFormData & { images: EditableImage[] },
@@ -77,17 +80,21 @@ export function NodeForm({
   const form = useForm<NodeFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: initial?.name || "",
+      name: initial?.name || prefill?.name || "",
       categoryIds:
         initial?.categories?.map((category) => category.id) ||
         (initial?.categoryId || initial?.category?.id
           ? [initial.categoryId || initial.category!.id]
-          : []),
+          : prefill?.categories?.map((category) => category.id) ||
+            (prefill?.categoryId || prefill?.category?.id
+              ? [prefill.categoryId || prefill.category!.id]
+              : [])),
       specificationIds: initial?.specifications?.map((item) => item.id) || [],
       notes: initial?.notes || "",
       targetId: defaultTargetId,
       createMode: defaultTargetId ? "PLACE" : "STAGE",
-      tagIds: initial?.tags?.map((tag) => tag.id) || [],
+      nextCreateType: "NONE",
+      tagIds: initial?.tags?.map((tag) => tag.id) || prefill?.tags?.map((tag) => tag.id) || [],
     },
   });
   const createMode = form.watch("createMode");
@@ -101,8 +108,12 @@ export function NodeForm({
     return () => window.clearTimeout(timer);
   }, [specificationSearchInput]);
   const tagOptions = useMemo(
-    () => mergeTaxonomyOptions(initial?.tags, pageItems(tags.data), createdTags),
-    [createdTags, initial?.tags, tags.data],
+    () => mergeTaxonomyOptions(initial?.tags, prefill?.tags, pageItems(tags.data), createdTags),
+    [createdTags, initial?.tags, prefill?.tags, tags.data],
+  );
+  const categoryOptions = useMemo(
+    () => mergeTaxonomyOptions(initial?.categories, prefill?.categories, pageItems(categories.data)),
+    [categories.data, initial?.categories, prefill?.categories],
   );
   const specificationOptions = useMemo(
     () => mergeTaxonomyOptions(
@@ -291,7 +302,7 @@ export function NodeForm({
             <AntSelect
               mode="multiple"
               value={form.watch("categoryIds")}
-              options={pageItems(categories.data).map((category) => ({
+              options={categoryOptions.map((category) => ({
                 value: category.id,
                 label: category.name,
               }))}
@@ -471,14 +482,46 @@ export function NodeForm({
           {form.formState.errors.root.message}
         </p>
       )}
+      {!initial && type === "ITEM" && (
+        <section className="surface p-5">
+          <Field
+            label="创建完成后"
+            hint="可继续创建同名、同分类和同标签的收纳位置"
+          >
+            <Select
+              value={form.watch("nextCreateType")}
+              onChange={(event) =>
+                form.setValue(
+                  "nextCreateType",
+                  event.target.value as NodeFormData["nextCreateType"],
+                  { shouldDirty: true },
+                )
+              }
+            >
+              <option value="NONE">仅创建物品</option>
+              <option value="BAG">继续添加袋子</option>
+              <option value="BOX">继续添加箱子</option>
+              <option value="WAREHOUSE">继续添加仓库</option>
+            </Select>
+          </Field>
+        </section>
+      )}
       <div className="safe-bottom sticky bottom-20 z-10 flex justify-end gap-3 border-t bg-background/95 py-4 backdrop-blur lg:bottom-0">
         <Button type="submit" loading={busy}>
-          {submitLabel}
+          {!initial && type === "ITEM" && form.watch("nextCreateType") !== "NONE"
+            ? `创建物品并添加${typeLabel[form.watch("nextCreateType") as Exclude<NodeFormData["nextCreateType"], "NONE">]}`
+            : submitLabel}
         </Button>
       </div>
     </form>
   );
 }
+
+const typeLabel: Record<Exclude<NodeFormData["nextCreateType"], "NONE">, string> = {
+  BAG: "袋子",
+  BOX: "箱子",
+  WAREHOUSE: "仓库",
+};
 
 function mergeTaxonomyOptions<T extends { id: string; name: string }>(
   ...groups: Array<readonly T[] | undefined>

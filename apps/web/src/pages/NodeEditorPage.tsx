@@ -29,6 +29,14 @@ export function NodeEditorPage({
     (params.get("type") as NodeType | null) ||
     detail.data?.type ||
     "ITEM";
+  const sourceItemId = mode === "create" && type !== "ITEM"
+    ? params.get("sourceItemId")
+    : null;
+  const sourceItem = useQuery({
+    queryKey: ["node", sourceItemId],
+    queryFn: () => queries.node(sourceItemId!),
+    enabled: Boolean(sourceItemId),
+  });
   const mutation = useMutation({
     mutationFn: async (values: NodeFormData & { images: EditableImage[] }) => {
       if (mode === "create")
@@ -72,9 +80,21 @@ export function NodeEditorPage({
         },
       });
     },
-    onSuccess: async (result) => {
+    onSuccess: async (result, values) => {
       await queryClient.invalidateQueries();
       const resultId = result.node?.id || result.id || id;
+      if (
+        mode === "create" &&
+        type === "ITEM" &&
+        resultId &&
+        values.nextCreateType !== "NONE"
+      ) {
+        navigate(
+          `/locations/new?type=${values.nextCreateType}&sourceItemId=${encodeURIComponent(resultId)}`,
+          { replace: true },
+        );
+        return;
+      }
       navigate(
         type === "ITEM" ? `/items/${resultId}` : `/locations/${resultId}`,
         { replace: true },
@@ -101,6 +121,20 @@ export function NodeEditorPage({
         <Skeleton className="h-96" />
       </>
     );
+  if (sourceItemId && sourceItem.isError)
+    return (
+      <>
+        <PageHeader title={`新建${typeName}`} back />
+        <QueryError error={sourceItem.error} onRetry={() => sourceItem.refetch()} />
+      </>
+    );
+  if (sourceItemId && !sourceItem.data)
+    return (
+      <>
+        <PageHeader title={`新建${typeName}`} back />
+        <Skeleton className="h-96" />
+      </>
+    );
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
@@ -118,9 +152,10 @@ export function NodeEditorPage({
         </Alert>
       )}
       <NodeForm
-        key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}`}
+        key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}:${sourceItem.data?.version || "empty"}`}
         type={type}
         initial={detail.data}
+        prefill={sourceItem.data}
         onSubmit={(payload) =>
           mutation.mutateAsync(payload).then(() => undefined)
         }
