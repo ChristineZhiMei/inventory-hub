@@ -345,22 +345,10 @@ export function NodeDetailPage() {
           </Card>
           {node.type !== "ITEM" && (
             <Card>
-              <CardHeader className="flex-row items-center justify-between">
-                <div>
-                  <CardTitle>收纳内容</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    直接{" "}
-                    {contents.data?.counts?.directItems ??
-                      node.directItemCount ??
-                      0}{" "}
-                    件物品 · 递归{" "}
-                    {contents.data?.counts?.recursiveItems ??
-                      node.recursiveItemCount ??
-                      0}{" "}
-                    件物品
-                  </p>
-                </div>
+              <CardHeader className="node-contents-header">
+                <CardTitle>收纳内容</CardTitle>
                 <Segmented
+                  className="node-contents-header__tabs"
                   value={recursive}
                   onChange={setRecursive}
                   options={[
@@ -368,6 +356,17 @@ export function NodeDetailPage() {
                     { value: "recursive", label: "递归" },
                   ]}
                 />
+                <p className="col-span-2 text-sm text-muted-foreground">
+                  直接{" "}
+                  {contents.data?.counts?.directItems ??
+                    node.directItemCount ??
+                    0}{" "}
+                  件物品 · 递归{" "}
+                  {contents.data?.counts?.recursiveItems ??
+                    node.recursiveItemCount ??
+                    0}{" "}
+                  件物品
+                </p>
               </CardHeader>
               <CardContent>
                 {contents.isLoading ? (

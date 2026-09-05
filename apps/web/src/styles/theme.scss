@@ -425,6 +425,23 @@ body {
   padding: var(--space-2) var(--space-5) var(--space-5);
 }
 
+.node-contents-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  text-align: left;
+
+  &__tabs {
+    justify-self: end;
+  }
+
+  > p {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+}
+
 .app-tag {
   display: inline-flex;
   min-height: 24px;
