@@ -431,11 +431,17 @@ export function NodeDetailPage() {
                     <dd className="mt-1 font-medium">{node.category.name}</dd>
                   </div>
                 )}
-                {node.specification && (
+                {(node.specifications?.length || node.specification) && (
                   <div>
                     <dt className="text-muted-foreground">规格</dt>
-                    <dd className="mt-1 whitespace-pre-wrap">
-                      {node.specification}
+                    <dd className="mt-2 flex flex-wrap gap-1">
+                      {node.specifications?.length
+                        ? node.specifications.map((specification) => (
+                            <Badge key={specification.id} variant="outline">
+                              {specification.name}
+                            </Badge>
+                          ))
+                        : node.specification}
                     </dd>
                   </div>
                 )}

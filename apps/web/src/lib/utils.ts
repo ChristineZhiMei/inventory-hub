@@ -39,6 +39,9 @@ export const operationActionLabels: Record<string, string> = {
   TAG_CREATE: "新建标签",
   TAG_EDIT: "编辑标签",
   TAG_DELETE: "删除标签",
+  SPECIFICATION_CREATE: "新建规格",
+  SPECIFICATION_EDIT: "编辑规格",
+  SPECIFICATION_DELETE: "删除规格",
 };
 
 export function formatOperationSummary(action: string, summary: string) {

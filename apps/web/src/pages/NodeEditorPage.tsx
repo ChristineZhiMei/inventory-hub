@@ -40,8 +40,8 @@ export function NodeEditorPage({
             name: values.name,
             notes: values.notes || undefined,
             categoryId: type === "ITEM" ? values.categoryId : undefined,
-            specification:
-              type === "ITEM" ? values.specification || undefined : undefined,
+            specificationIds:
+              type === "ITEM" ? values.specificationIds : undefined,
             tagIds: values.tagIds,
             uploadIds: values.images
               .map((image) => image.uploadId)
@@ -63,8 +63,8 @@ export function NodeEditorPage({
           name: values.name,
           notes: values.notes || "",
           categoryId: type === "ITEM" ? values.categoryId : undefined,
-          specification:
-            type === "ITEM" ? values.specification || "" : undefined,
+          specificationIds:
+            type === "ITEM" ? values.specificationIds : undefined,
           tagIds: values.tagIds,
           images: values.images.map((image) =>
             image.imageId

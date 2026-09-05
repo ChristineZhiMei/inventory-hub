@@ -10,6 +10,7 @@ import type {
   PrintJob,
   RuntimeStatus,
   StorageStatus,
+  Specification,
   Tag,
 } from "./types";
 
@@ -67,6 +68,8 @@ export const queries = {
     ),
   categories: () => api<PageData<Category> | Category[]>("/categories"),
   tags: () => api<PageData<Tag> | Tag[]>("/tags"),
+  specifications: (search = "") =>
+    api<PageData<Specification>>(`/specifications${search ? `?${search}` : ""}`),
   operations: (search = "") =>
     api<PageData<Operation>>(`/operations${search ? `?${search}` : ""}`),
   operation: async (id: string) => {

@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
-import { Checkbox, Radio } from "antd";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Radio, Select as AntSelect, Spin } from "antd";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
-import type { InventoryNode, NodeType } from "@/lib/types";
+import type { InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
 import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
 import { ImageManager, type EditableImage } from "./ImageManager";
 
 const schema = z.object({
   name: z.string().trim().min(1, "请输入名称").max(120, "名称最多 120 个字符"),
   categoryId: z.string().optional(),
-  specification: z.string().max(500, "规格最多 500 个字符").optional(),
+  specificationIds: z.array(z.string()),
   notes: z.string().max(2000, "备注最多 2000 个字符").optional(),
   targetId: z.string().optional(),
   targetLocationToken: z.string().optional(),
@@ -45,12 +45,30 @@ export function NodeForm({
       state: "existing",
     })),
   );
+  const queryClient = useQueryClient();
+  const [createdTags, setCreatedTags] = useState<Tag[]>([]);
+  const [createdSpecifications, setCreatedSpecifications] = useState<Specification[]>([]);
+  const [specificationSearchInput, setSpecificationSearchInput] = useState("");
+  const [specificationSearch, setSpecificationSearch] = useState("");
+  const [creatingTaxonomy, setCreatingTaxonomy] = useState<"tag" | "specification" | null>(null);
   const categories = useQuery({
     queryKey: ["categories"],
     queryFn: queries.categories,
     enabled: type === "ITEM",
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
+  const specifications = useInfiniteQuery({
+    queryKey: ["specifications", "options", specificationSearch],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: "30" });
+      if (specificationSearch) params.set("q", specificationSearch);
+      if (pageParam) params.set("cursor", String(pageParam));
+      return queries.specifications(params.toString());
+    },
+    initialPageParam: "",
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    enabled: type === "ITEM",
+  });
   const locations = useQuery({
     queryKey: ["locations", "all"],
     queryFn: () => queries.locations("limit=100"),
@@ -63,7 +81,7 @@ export function NodeForm({
     defaultValues: {
       name: initial?.name || "",
       categoryId: initial?.categoryId || initial?.category?.id || "",
-      specification: initial?.specification || "",
+      specificationIds: initial?.specifications?.map((item) => item.id) || [],
       notes: initial?.notes || "",
       targetId: defaultTargetId,
       createMode: defaultTargetId ? "PLACE" : "STAGE",
@@ -72,6 +90,26 @@ export function NodeForm({
   });
   const createMode = form.watch("createMode");
   const selectedTags = form.watch("tagIds");
+  const selectedSpecifications = form.watch("specificationIds");
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setSpecificationSearch(specificationSearchInput.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [specificationSearchInput]);
+  const tagOptions = useMemo(
+    () => mergeTaxonomyOptions(initial?.tags, pageItems(tags.data), createdTags),
+    [createdTags, initial?.tags, tags.data],
+  );
+  const specificationOptions = useMemo(
+    () => mergeTaxonomyOptions(
+      initial?.specifications,
+      specifications.data?.pages.flatMap((page) => page.items),
+      createdSpecifications,
+    ),
+    [createdSpecifications, initial?.specifications, specifications.data?.pages],
+  );
   const allowedLocations = useMemo(
     () =>
       pageItems(locations.data).filter((node) => {
@@ -90,6 +128,67 @@ export function NodeForm({
   useEffect(() => {
     if (createMode === "STAGE") form.setValue("targetId", "");
   }, [createMode, form]);
+
+  async function updateCreatableSelection(
+    kind: "tag" | "specification",
+    values: string[],
+  ) {
+    const knownOptions = kind === "tag" ? tagOptions : specificationOptions;
+    const selectedIds: string[] = [];
+    try {
+      setCreatingTaxonomy(kind);
+      for (const value of values) {
+        const candidate = value.normalize("NFKC").trim().replace(/\s+/g, " ");
+        const existing = knownOptions.find(
+          (item) =>
+            item.id === value ||
+            item.name.localeCompare(candidate, "zh-CN", { sensitivity: "base" }) === 0,
+        );
+        if (existing) {
+          selectedIds.push(existing.id);
+          continue;
+        }
+        if (!candidate) continue;
+        const created = await api<Tag | Specification>(
+          kind === "tag" ? "/tags" : "/specifications",
+          { method: "POST", idempotent: true, body: { name: candidate } },
+        );
+        selectedIds.push(created.id);
+        if (kind === "tag") {
+          setCreatedTags((current) => mergeTaxonomyOptions(current, [created as Tag]));
+        } else {
+          setCreatedSpecifications((current) => mergeTaxonomyOptions(current, [created as Specification]));
+        }
+      }
+      const uniqueIds = [...new Set(selectedIds)];
+      if (kind === "tag") {
+        form.setValue("tagIds", uniqueIds.slice(0, 20), {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        form.clearErrors("tagIds");
+        await queryClient.invalidateQueries({ queryKey: ["tags"] });
+      } else {
+        form.setValue("specificationIds", uniqueIds, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        form.clearErrors("specificationIds");
+        setSpecificationSearchInput("");
+        setSpecificationSearch("");
+        await queryClient.invalidateQueries({ queryKey: ["specifications"] });
+      }
+    } catch (error) {
+      form.setError(kind === "tag" ? "tagIds" : "specificationIds", {
+        message:
+          error instanceof Error
+            ? error.message
+            : `${kind === "tag" ? "标签" : "规格"}创建失败`,
+      });
+    } finally {
+      setCreatingTaxonomy(null);
+    }
+  }
 
   async function submit(values: NodeFormData) {
     form.clearErrors();
@@ -205,47 +304,61 @@ export function NodeForm({
           {type === "ITEM" && (
             <Field
               label="规格"
-              htmlFor="specification"
-              error={form.formState.errors.specification?.message}
-              hint="可填写尺码、材质、颜色等固定说明"
+              error={form.formState.errors.specificationIds?.message}
+              hint="可选择历史规格；输入新规格后按回车即可创建并添加"
             >
-              <Input
-                id="specification"
-                {...form.register("specification")}
-                placeholder="例如：M / 羊毛 / 灰色"
+              <AntSelect
+                mode="tags"
+                value={selectedSpecifications}
+                options={specificationOptions.map((item) => ({ value: item.id, label: item.name }))}
+                placeholder="搜索或创建规格"
+                size="large"
+                className="w-full"
+                filterOption={false}
+                searchValue={specificationSearchInput}
+                onSearch={setSpecificationSearchInput}
+                onChange={(values) => void updateCreatableSelection("specification", values)}
+                onPopupScroll={(event) => {
+                  const target = event.currentTarget;
+                  if (
+                    target.scrollTop + target.clientHeight >= target.scrollHeight - 24 &&
+                    specifications.hasNextPage &&
+                    !specifications.isFetchingNextPage
+                  ) {
+                    void specifications.fetchNextPage();
+                  }
+                }}
+                loading={specifications.isLoading || creatingTaxonomy === "specification"}
+                notFoundContent={
+                  specifications.isFetching ? <Spin size="small" /> : "输入后按回车创建"
+                }
+                maxTagCount="responsive"
+                tokenSeparators={[",", "，"]}
+                allowClear
               />
             </Field>
           )}
           <Field
             label="标签"
+            error={form.formState.errors.tagIds?.message}
+            hint="输入新标签后按回车即可创建并添加，最多选择 20 个"
             className={type === "ITEM" ? "" : "md:col-span-2"}
           >
-            <div className="flex min-h-11 flex-wrap gap-2 rounded-md border bg-card p-2">
-              {pageItems(tags.data).length === 0 ? (
-                <p className="px-1 py-1.5 text-sm text-muted-foreground">
-                  暂无标签，可先在“分类与标签”中创建
-                </p>
-              ) : (
-                pageItems(tags.data).map((tag) => (
-                  <Checkbox
-                    key={tag.id}
-                    checked={selectedTags.includes(tag.id)}
-                    onChange={(event) =>
-                      form.setValue(
-                        "tagIds",
-                        event.target.checked
-                          ? [...selectedTags, tag.id]
-                          : selectedTags.filter((id) => id !== tag.id),
-                        { shouldDirty: true },
-                      )
-                    }
-                    className="app-tag-checkbox"
-                  >
-                    {tag.name}
-                  </Checkbox>
-                ))
-              )}
-            </div>
+            <AntSelect
+              mode="tags"
+              value={selectedTags}
+              options={tagOptions.map((item) => ({ value: item.id, label: item.name }))}
+              placeholder="选择或创建标签"
+              size="large"
+              className="w-full"
+              optionFilterProp="label"
+              onChange={(values) => void updateCreatableSelection("tag", values)}
+              loading={tags.isLoading || creatingTaxonomy === "tag"}
+              maxCount={20}
+              maxTagCount="responsive"
+              tokenSeparators={[",", "，"]}
+              allowClear
+            />
           </Field>
           <Field
             label="备注"
@@ -352,4 +465,12 @@ export function NodeForm({
       </div>
     </form>
   );
+}
+
+function mergeTaxonomyOptions<T extends { id: string; name: string }>(
+  ...groups: Array<readonly T[] | undefined>
+): T[] {
+  const merged = new Map<string, T>();
+  for (const item of groups.flatMap((group) => group ?? [])) merged.set(item.id, item);
+  return [...merged.values()];
 }

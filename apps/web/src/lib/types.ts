@@ -35,6 +35,13 @@ export interface Tag {
   referenceCount?: number;
   referenceToken?: string;
 }
+export interface Specification {
+  id: string;
+  name: string;
+  version: number;
+  referenceCount?: number;
+  referenceToken?: string;
+}
 
 export interface InventoryNode {
   id: string;
@@ -52,6 +59,7 @@ export interface InventoryNode {
   categoryId?: string | null;
   category?: Category | null;
   specification?: string | null;
+  specifications?: Specification[];
   tags?: Tag[];
   images?: ImageMeta[];
   path?: Array<Pick<InventoryNode, "id" | "code" | "name" | "type">>;

@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit3, Plus, Shapes, Tag as TagIcon, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit3, Plus, Ruler, Search, Shapes, Tag as TagIcon, Trash2 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
-import type { Category, Tag } from "@/lib/types";
+import type { Category, Specification, Tag } from "@/lib/types";
 import { QueryError } from "@/components/Page";
 import {
   Alert,
@@ -21,10 +21,20 @@ import {
   Select,
 } from "@/components/AntUi";
 
-type Tab = "categories" | "tags";
+type Tab = "categories" | "tags" | "specifications";
 type EditTarget =
   | { kind: "category"; item?: Category }
-  | { kind: "tag"; item?: Tag };
+  | { kind: "tag"; item?: Tag }
+  | { kind: "specification"; item?: Specification };
+
+const kindLabel = (kind: EditTarget["kind"] | Tab) =>
+  kind === "category" || kind === "categories"
+    ? "分类"
+    : kind === "tag" || kind === "tags"
+      ? "标签"
+      : "规格";
+const queryKeyForKind = (kind: EditTarget["kind"]) =>
+  kind === "category" ? ["categories"] : kind === "tag" ? ["tags"] : ["specifications"];
 
 export function TaxonomyPage() {
   const queryClient = useQueryClient();
@@ -35,18 +45,44 @@ export function TaxonomyPage() {
   const [parentId, setParentId] = useState("");
   const [confirm, setConfirm] = useState("");
   const [reassignTargetId, setReassignTargetId] = useState("");
+  const [specificationSearchInput, setSpecificationSearchInput] = useState("");
+  const [specificationSearch, setSpecificationSearch] = useState("");
   const categories = useQuery({
     queryKey: ["categories"],
     queryFn: queries.categories,
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSpecificationSearch(specificationSearchInput.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [specificationSearchInput]);
+  const specifications = useInfiniteQuery({
+    queryKey: ["specifications", "manager", specificationSearch],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: "50" });
+      if (specificationSearch) params.set("q", specificationSearch);
+      if (pageParam) params.set("cursor", String(pageParam));
+      return queries.specifications(params.toString());
+    },
+    initialPageParam: "",
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+  });
   const list =
-    tab === "categories" ? pageItems(categories.data) : pageItems(tags.data);
-  const currentQuery = tab === "categories" ? categories : tags;
+    tab === "categories"
+      ? pageItems(categories.data)
+      : tab === "tags"
+        ? pageItems(tags.data)
+        : specifications.data?.pages.flatMap((page) => page.items) ?? [];
+  const currentQuery = tab === "categories" ? categories : tab === "tags" ? tags : specifications;
   const save = useMutation({
     mutationFn: () => {
       if (!editing) throw new Error("缺少编辑对象");
-      const endpoint = editing.kind === "category" ? "/categories" : "/tags";
+      const endpoint =
+        editing.kind === "category"
+          ? "/categories"
+          : editing.kind === "tag"
+            ? "/tags"
+            : "/specifications";
       const body =
         editing.kind === "category"
           ? editing.item
@@ -70,7 +106,7 @@ export function TaxonomyPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: editing?.kind === "category" ? ["categories"] : ["tags"],
+        queryKey: editing ? queryKeyForKind(editing.kind) : [],
       });
       setEditing(null);
     },
@@ -79,7 +115,7 @@ export function TaxonomyPage() {
     mutationFn: () => {
       if (!deleting?.item) throw new Error("缺少删除对象");
       return api(
-        `/${deleting.kind === "category" ? "categories" : "tags"}/${deleting.item.id}`,
+        `/${deleting.kind === "category" ? "categories" : deleting.kind === "tag" ? "tags" : "specifications"}/${deleting.item.id}`,
         {
           method: "DELETE",
           idempotent: true,
@@ -96,7 +132,7 @@ export function TaxonomyPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: deleting?.kind === "category" ? ["categories"] : ["tags"],
+        queryKey: deleting ? queryKeyForKind(deleting.kind) : [],
       });
       setDeleting(null);
       setConfirm("");
@@ -146,17 +182,34 @@ export function TaxonomyPage() {
             options={[
               { value: "categories", label: "分类树" },
               { value: "tags", label: "标签" },
+              { value: "specifications", label: "规格记录" },
             ]}
           />
+          {tab === "specifications" && (
+            <Input
+              value={specificationSearchInput}
+              onChange={(event) => setSpecificationSearchInput(event.target.value)}
+              placeholder="搜索历史规格"
+              prefix={<Search className="size-4" />}
+              className="taxonomy-search"
+            />
+          )}
         </div>
         <div className="page-toolbar__actions">
         <Button
           onClick={() =>
-            openEdit({ kind: tab === "categories" ? "category" : "tag" })
+            openEdit({
+              kind:
+                tab === "categories"
+                  ? "category"
+                  : tab === "tags"
+                    ? "tag"
+                    : "specification",
+            })
           }
         >
           <Plus className="size-4" />
-          新建{tab === "categories" ? "分类" : "标签"}
+          新建{kindLabel(tab)}
         </Button>
         </div>
       </div>
@@ -173,10 +226,12 @@ export function TaxonomyPage() {
             <CardTitle className="flex items-center gap-2">
               {tab === "categories" ? (
                 <Shapes className="size-5" />
-              ) : (
+              ) : tab === "tags" ? (
                 <TagIcon className="size-5" />
+              ) : (
+                <Ruler className="size-5" />
               )}
-              {tab === "categories" ? "分类" : "标签"}
+              {kindLabel(tab)}
             </CardTitle>
           </CardHeader>
           <CardContent className="divide-y">
@@ -206,7 +261,12 @@ export function TaxonomyPage() {
                   size="icon"
                   onClick={() =>
                     openEdit({
-                      kind: tab === "categories" ? "category" : "tag",
+                      kind:
+                        tab === "categories"
+                          ? "category"
+                          : tab === "tags"
+                            ? "tag"
+                            : "specification",
                       item,
                     } as EditTarget)
                   }
@@ -219,7 +279,12 @@ export function TaxonomyPage() {
                   size="icon"
                   onClick={() =>
                     setDeleting({
-                      kind: tab === "categories" ? "category" : "tag",
+                      kind:
+                        tab === "categories"
+                          ? "category"
+                          : tab === "tags"
+                            ? "tag"
+                            : "specification",
                       item,
                     } as EditTarget)
                   }
@@ -229,23 +294,36 @@ export function TaxonomyPage() {
                 </Button>
               </div>
             ))}
+            {tab === "specifications" && specifications.hasNextPage && (
+              <div className="flex justify-center py-4">
+                <Button
+                  variant="outline"
+                  loading={specifications.isFetchingNextPage}
+                  onClick={() => specifications.fetchNextPage()}
+                >
+                  加载更多
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
         <EmptyState
-          icon={tab === "categories" ? Shapes : TagIcon}
-          title={`还没有${tab === "categories" ? "分类" : "标签"}`}
+          icon={tab === "categories" ? Shapes : tab === "tags" ? TagIcon : Ruler}
+          title={`还没有${kindLabel(tab)}`}
           description={
             tab === "categories"
               ? "物品建档必须选择一个分类，可以建立最多 5 层分类树。"
-              : "标签可关联物品、袋子、箱子和仓库，最多 20 个。"
+              : tab === "tags"
+                ? "标签可关联物品、袋子、箱子和仓库，每个档案最多 20 个。"
+                : "创建过的规格会保留在这里，之后建档时可以搜索并复用。"
           }
         />
       )}
       <Dialog
         open={!!editing}
         onClose={() => setEditing(null)}
-        title={`${editing?.item ? "编辑" : "新建"}${editing?.kind === "category" ? "分类" : "标签"}`}
+        title={`${editing?.item ? "编辑" : "新建"}${editing ? kindLabel(editing.kind) : "记录"}`}
         footer={
           <>
             <Button variant="outline" onClick={() => setEditing(null)}>
@@ -301,11 +379,11 @@ export function TaxonomyPage() {
       <Dialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
-        title={`删除${deleting?.kind === "category" ? "分类" : "标签"}`}
+        title={`删除${deleting ? kindLabel(deleting.kind) : "记录"}`}
         description={
           deleting?.kind === "category"
             ? "有子分类或物品引用时会拒绝删除。"
-            : "删除会解除所有档案关联并写入操作记录。"
+            : `删除会解除所有档案中的${deleting ? kindLabel(deleting.kind) : "记录"}关联并写入操作记录。`
         }
         footer={
           <>
@@ -316,7 +394,7 @@ export function TaxonomyPage() {
               variant="destructive"
               loading={remove.isPending}
               disabled={
-                (deleting?.kind === "tag" && confirm !== deleting.item?.name) ||
+                (deleting?.kind !== "category" && confirm !== deleting?.item?.name) ||
                 (deleting?.kind === "category" &&
                   ((deleting.item?.referenceCount || 0) > 0 ||
                     (deleting.item?.childCount || 0) > 0))
@@ -329,7 +407,9 @@ export function TaxonomyPage() {
         }
       >
         <Alert title="删除不会改变任何物品位置" tone="warning">
-          分类被引用时先迁移直接引用；有子分类时先处理子类。
+          {deleting?.kind === "category"
+            ? "分类被引用时先迁移直接引用；有子分类时先处理子类。"
+            : `删除后，所有档案会解除该${deleting ? kindLabel(deleting.kind) : "记录"}关联。`}
         </Alert>
         {deleting?.kind === "category" &&
           (deleting.item?.referenceCount || 0) > 0 && (
@@ -371,7 +451,7 @@ export function TaxonomyPage() {
               )}
             </div>
           )}
-        {deleting?.kind === "tag" && (
+        {deleting?.kind !== "category" && deleting?.item && (
           <Field label={`输入“${deleting.item?.name}”确认`}>
             <Input
               value={confirm}

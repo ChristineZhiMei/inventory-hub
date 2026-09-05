@@ -81,7 +81,7 @@ export function IntakePage() {
           type: "ITEM",
           name: values.name,
           categoryId: values.categoryId,
-          specification: values.specification || undefined,
+          specificationIds: values.specificationIds,
           notes: values.notes || undefined,
           tagIds: values.tagIds,
           uploadIds: values.images
