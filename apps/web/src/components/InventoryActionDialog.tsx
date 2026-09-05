@@ -7,7 +7,7 @@ import type {
   InventoryNode,
   OperationPreview,
 } from "@/lib/types";
-import { Alert, Button, Dialog, Field, Select, Textarea } from "./AntUi";
+import { Alert, Button, Dialog, Field, Input, Select, Textarea } from "./AntUi";
 
 const labels: Record<
   InventoryAction,
@@ -51,12 +51,16 @@ export function InventoryActionDialog({
   nodes,
   onClose,
   reversesOperationId,
+  fixedTarget,
+  onCommitted,
 }: {
   open: boolean;
   action: InventoryAction;
   nodes: InventoryNode[];
   onClose: () => void;
   reversesOperationId?: string;
+  fixedTarget?: InventoryNode;
+  onCommitted?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [targetId, setTargetId] = useState("");
@@ -67,7 +71,7 @@ export function InventoryActionDialog({
   const locations = useQuery({
     queryKey: ["locations", "action-target", action],
     queryFn: () => queries.locations("limit=100"),
-    enabled: open && (requiresTarget || optionalTarget),
+    enabled: open && !fixedTarget && (requiresTarget || optionalTarget),
   });
   const allowed = useMemo(() => {
     const parentTypes: Record<InventoryNode["type"], InventoryNode["type"][]> =
@@ -127,16 +131,17 @@ export function InventoryActionDialog({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
+      onCommitted?.();
       onClose();
     },
   });
   useEffect(() => {
     if (open) {
       setPreview(null);
-      setTargetId("");
+      setTargetId(fixedTarget?.id || "");
       setReason("");
     }
-  }, [open, action]);
+  }, [open, action, fixedTarget?.id]);
   useEffect(() => setPreview(null), [targetId, reason]);
   const copy = labels[action];
   return (
@@ -186,7 +191,11 @@ export function InventoryActionDialog({
             ? "这是原子批次：任一对象冲突时整批不会生效。"
             : "提交前服务会重新检查位置、状态和内容变化。"}
         </Alert>
-        {(requiresTarget || optionalTarget) && (
+        {fixedTarget && (requiresTarget || optionalTarget) ? (
+          <Field label="目标位置">
+            <Input value={`${fixedTarget.code} · ${fixedTarget.name}`} readOnly />
+          </Field>
+        ) : (requiresTarget || optionalTarget) && (
           <Field
             label={requiresTarget ? "目标位置" : "目标位置（不选则为暂存区）"}
             required={requiresTarget}

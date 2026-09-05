@@ -28,6 +28,7 @@ import type {
 } from "@/lib/types";
 import { formatDate, formatOperationSummary } from "@/lib/utils";
 import { CodeLabel } from "@/components/CodeLabel";
+import { AddContentsDialog } from "@/components/AddContentsDialog";
 import { InventoryActionDialog } from "@/components/InventoryActionDialog";
 import {
   NodeCard,
@@ -64,6 +65,7 @@ export function NodeDetailPage() {
   const [executorId, setExecutorId] = useState("");
   const [confirmCode, setConfirmCode] = useState("");
   const [lastPrintJobId, setLastPrintJobId] = useState("");
+  const [addContentsOpen, setAddContentsOpen] = useState(false);
   const detail = useQuery({
     queryKey: ["node", id],
     queryFn: () => queries.node(id!),
@@ -195,6 +197,12 @@ export function NodeDetailPage() {
         back
         actions={
           <>
+            {node.type !== "ITEM" && (
+              <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
+                <PackagePlus className="size-4" />
+                添加内容
+              </Button>
+            )}
             <Link
               to={`${node.type === "ITEM" ? `/items/${node.id}` : `/locations/${node.id}`}/edit`}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
@@ -604,6 +612,13 @@ export function NodeDetailPage() {
         nodes={[node]}
         onClose={() => setAction(null)}
       />
+      {node.type !== "ITEM" && (
+        <AddContentsDialog
+          open={addContentsOpen}
+          target={node}
+          onClose={() => setAddContentsOpen(false)}
+        />
+      )}
       <Dialog
         open={printOpen}
         onClose={() => setPrintOpen(false)}
