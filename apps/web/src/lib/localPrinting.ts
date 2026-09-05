@@ -82,7 +82,9 @@ async function consumeSerially() {
           widthMm: paper.widthMm || 40,
           heightMm: paper.heightMm || 30,
           marginMm: paper.marginMm ?? 1.5,
-          landscape: paper.orientation === "landscape",
+          // D35 labels are defined as width × feed length. Send them through the
+          // horizontal print path so Chromium and the driver use the same origin.
+          landscape: true,
         },
       })) as { acceptedBySystem?: boolean; message?: string };
       state = result.acceptedBySystem === true ? "SUBMITTED" : "FAILED";

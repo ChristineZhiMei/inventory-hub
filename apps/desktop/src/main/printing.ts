@@ -44,7 +44,7 @@ export async function printLabel(
           printBackground: true,
           deviceName: request.printerName,
           copies: 1,
-          landscape: false,
+          landscape: request.paper.landscape ?? true,
           scaleFactor: 100,
           margins: { marginType: "none" },
           pageSize: {

@@ -56,7 +56,7 @@ export class PrintService {
             copyIndex,
             templateId: input.templateId,
             templateVersion: 1,
-            paper: { ...labelPaper(input.templateId), orientation: "portrait" },
+            paper: { ...labelPaper(input.templateId), orientation: "landscape" },
             printerId: input.printerId,
             executorId: input.executorId,
             renderVersion: 1,
