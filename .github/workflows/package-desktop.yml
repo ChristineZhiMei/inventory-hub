@@ -15,29 +15,9 @@ concurrency:
 
 jobs:
   package:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    name: Windows x64
+    runs-on: windows-2022
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows x64
-            runner: windows-2022
-            package_script: package:win:x64
-            artifact_name: inventory-hub-windows-x64
-            artifact_path: |
-              apps/desktop/release/*.exe
-              apps/desktop/release/*.zip
-              apps/desktop/release/*.blockmap
-          - name: macOS Intel x64
-            runner: macos-15-intel
-            package_script: package:mac:x64
-            artifact_name: inventory-hub-macos-x64
-            artifact_path: |
-              apps/desktop/release/*.dmg
-              apps/desktop/release/*.zip
-              apps/desktop/release/*.blockmap
 
     env:
       CI: "true"
@@ -73,12 +53,15 @@ jobs:
         run: pnpm build
 
       - name: Package desktop
-        run: pnpm --filter @inventory-hub/desktop run ${{ matrix.package_script }}
+        run: pnpm --filter @inventory-hub/desktop run package:win:x64
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: inventory-hub-windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
           if-no-files-found: error
           retention-days: 14
