@@ -22,6 +22,7 @@ import { Popup, TabBar } from "antd-mobile";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, resolvePendingRequest, unresolvedRequests } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { consumeLocalNativeQueue } from "@/lib/localPrinting";
 import { useTheme } from "@/lib/theme";
 import { Badge, Button, Input } from "./AntUi";
 
@@ -96,6 +97,15 @@ export function AppShell() {
         });
     }
   }, [online, queryClient]);
+  useEffect(() => {
+    if (!online || !window.inventoryHub?.printLabel) return;
+    const consume = () => {
+      void consumeLocalNativeQueue().catch(() => undefined);
+    };
+    consume();
+    const interval = window.setInterval(consume, 2_000);
+    return () => window.clearInterval(interval);
+  }, [online]);
 
   useQuery({
     queryKey: ["changes", revision],

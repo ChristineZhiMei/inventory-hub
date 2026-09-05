@@ -180,6 +180,7 @@ function createMainWindow(runtime: DesktopRuntimeConfig): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: false,
       allowRunningInsecureContent: false,
       spellcheck: false,
       webviewTag: false,

@@ -91,7 +91,8 @@ export function NodeDetailPage() {
   const printMutation = useMutation({
     mutationFn: async (remote?: { executorId: string; printerId: string }) => {
       const preference = printPreferences();
-      const native = !remote && preference.native;
+      const native =
+        !remote && capabilities.data?.deploymentMode === "desktop";
       const job = await api<{ id: string }>("/print-jobs", {
         method: "POST",
         idempotent: true,
@@ -100,13 +101,18 @@ export function NodeDetailPage() {
             remote?.executorId || (native ? "local-native" : "local-simulator"),
           printerId:
             remote?.printerId ||
-            (native ? preference.printerId : "HPRT-D35-SIMULATOR"),
+            (native
+              ? window.inventoryHub?.printLabel
+                ? preference.printerId
+                : "local-default"
+              : "HPRT-D35-SIMULATOR"),
           nodeIds: [id],
           templateId: `default-${preference.paper}`,
           copies: 1,
         },
       });
-      if (native) await consumeLocalNativeQueue();
+      if (native && window.inventoryHub?.printLabel)
+        await consumeLocalNativeQueue();
       return job;
     },
     onSuccess: (job) => {
@@ -216,7 +222,12 @@ export function NodeDetailPage() {
       {lastPrintJobId && (
         <Alert title="打印任务已创建" tone="success" className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>当前页面会保持不变，可以继续操作。</span>
+            <span>
+              {capabilities.data?.deploymentMode === "desktop" &&
+              !window.inventoryHub?.printLabel
+                ? "任务已发送到电脑端打印队列，页面可以继续操作。"
+                : "当前页面会保持不变，可以继续操作。"}
+            </span>
             <Link
               to={`/print-jobs/${lastPrintJobId}`}
               className="font-medium text-primary hover:underline"

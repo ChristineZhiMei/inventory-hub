@@ -52,6 +52,8 @@ export function printPreferences(): PrintPreferences {
 
 export function consumeLocalNativeQueue(): Promise<void> {
   if (!window.inventoryHub?.printLabel) return Promise.resolve();
+  if (!printPreferences().native)
+    return Promise.reject(new Error("请先在设置中选择本机打印机"));
   if (activeConsumer) return activeConsumer;
   activeConsumer = consumeSerially().finally(() => {
     activeConsumer = null;
@@ -74,8 +76,13 @@ async function consumeSerially() {
     let state: "SUBMITTED" | "FAILED" | "UNKNOWN" = "UNKNOWN";
     let evidence = "桌面打印调用未返回结果";
     try {
+      const preference = printPreferences();
+      const requestedPrinter = item.payload.printerId;
       const result = (await bridge({
-        printerName: item.payload.printerId || printPreferences().printerId,
+        printerName:
+          !requestedPrinter || requestedPrinter === "local-default"
+            ? preference.printerId
+            : requestedPrinter,
         jobName: `Inventory Hub ${item.payload.node.code}`,
         label: item.payload.node,
         paper: {
