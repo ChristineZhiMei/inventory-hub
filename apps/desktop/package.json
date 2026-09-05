@@ -8,7 +8,7 @@
     "clean": "rimraf dist release",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "pnpm run build && cross-env INVENTORY_HUB_DESKTOP_DEV_URL=http://127.0.0.1:14237 electron .",
+    "dev": "pnpm run build && node scripts/run-dev.mjs",
     "start": "electron .",
     "package": "pnpm run build && node scripts/run-builder.mjs --dir",
     "package:mac:arm64": "node scripts/assert-build-host.mjs darwin && pnpm run build && node scripts/run-builder.mjs --mac dmg zip --arm64",
