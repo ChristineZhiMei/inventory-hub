@@ -33,7 +33,16 @@ export function NodeForm({
 }: {
   type: NodeType;
   initial?: InventoryNode;
-  prefill?: Pick<InventoryNode, "name" | "categories" | "categoryId" | "category" | "tags">;
+  prefill?: Pick<
+    InventoryNode,
+    | "name"
+    | "categories"
+    | "categoryId"
+    | "category"
+    | "specifications"
+    | "specification"
+    | "tags"
+  >;
   submitLabel?: string;
   onSubmit: (
     payload: NodeFormData & { images: EditableImage[] },
@@ -89,7 +98,10 @@ export function NodeForm({
             (prefill?.categoryId || prefill?.category?.id
               ? [prefill.categoryId || prefill.category!.id]
               : [])),
-      specificationIds: initial?.specifications?.map((item) => item.id) || [],
+      specificationIds:
+        initial?.specifications?.map((item) => item.id) ||
+        prefill?.specifications?.map((item) => item.id) ||
+        [],
       notes: initial?.notes || "",
       targetId: defaultTargetId,
       createMode: defaultTargetId ? "PLACE" : "STAGE",
@@ -118,10 +130,16 @@ export function NodeForm({
   const specificationOptions = useMemo(
     () => mergeTaxonomyOptions(
       initial?.specifications,
+      prefill?.specifications,
       specifications.data?.pages.flatMap((page) => page.items),
       createdSpecifications,
     ),
-    [createdSpecifications, initial?.specifications, specifications.data?.pages],
+    [
+      createdSpecifications,
+      initial?.specifications,
+      prefill?.specifications,
+      specifications.data?.pages,
+    ],
   );
   const allowedLocations = useMemo(
     () =>
@@ -486,7 +504,7 @@ export function NodeForm({
         <section className="surface p-5">
           <Field
             label="创建完成后"
-            hint="可继续创建同名、同分类和同标签的收纳位置"
+            hint="可继续创建同名、同分类、同规格和同标签的收纳位置"
           >
             <Select
               value={form.watch("nextCreateType")}

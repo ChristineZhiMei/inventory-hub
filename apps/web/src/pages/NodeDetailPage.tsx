@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image, Table } from "antd";
+import { Dropdown, Image, Table } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -161,6 +161,10 @@ export function NodeDetailPage() {
     );
   const node = detail.data;
   const contentItems = pageItems(contents.data);
+  const canCreateMatchingLocation =
+    node.type === "ITEM" &&
+    node.stockStatus === "IN_STOCK" &&
+    node.path?.[1]?.isSystemStaging === true;
   const canDelete =
     node.stockStatus === "DISCARDED" ||
     (node.type === "WAREHOUSE" &&
@@ -197,6 +201,28 @@ export function NodeDetailPage() {
         back
         actions={
           <>
+            {canCreateMatchingLocation && (
+              <Dropdown
+                trigger={["click"]}
+                placement="bottomRight"
+                menu={{
+                  items: [
+                    { key: "BAG", label: "添加袋子" },
+                    { key: "BOX", label: "添加箱子" },
+                    { key: "WAREHOUSE", label: "添加仓库" },
+                  ],
+                  onClick: ({ key }) =>
+                    navigate(
+                      `/locations/new?type=${key}&sourceItemId=${encodeURIComponent(node.id)}`,
+                    ),
+                }}
+              >
+                <Button variant="outline" aria-haspopup="menu">
+                  <PackagePlus className="size-4" />
+                  添加收纳位置
+                </Button>
+              </Dropdown>
+            )}
             {node.type !== "ITEM" && (
               <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
                 <PackagePlus className="size-4" />

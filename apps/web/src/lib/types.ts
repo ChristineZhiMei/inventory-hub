@@ -63,7 +63,9 @@ export interface InventoryNode {
   specifications?: Specification[];
   tags?: Tag[];
   images?: ImageMeta[];
-  path?: Array<Pick<InventoryNode, "id" | "code" | "name" | "type">>;
+  path?: Array<
+    Pick<InventoryNode, "id" | "code" | "name" | "type" | "isSystemStaging">
+  >;
   lastPath?: Array<Pick<InventoryNode, "id" | "code" | "name" | "type">>;
   createdAt?: string;
   updatedAt?: string;

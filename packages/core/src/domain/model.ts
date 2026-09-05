@@ -108,7 +108,13 @@ export const serializeNode = (db: SqliteDatabase, node: NodeRow) => {
     isSystemStaging: Boolean(node.isSystemStaging),
     locationToken: locationToken(db, node.id),
     subtreeToken: node.type === "ITEM" ? undefined : subtreeToken(db, node.id),
-    path: path.map((entry) => ({ id: entry.id, code: entry.code, name: entry.name, type: entry.type })),
+    path: path.map((entry) => ({
+      id: entry.id,
+      code: entry.code,
+      name: entry.name,
+      type: entry.type,
+      isSystemStaging: Boolean(entry.isSystemStaging),
+    })),
     createdAt: new Date(node.createdAt).toISOString(),
     updatedAt: new Date(node.updatedAt).toISOString(),
   };
