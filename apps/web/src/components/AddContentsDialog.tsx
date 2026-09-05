@@ -1,12 +1,20 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table } from "antd";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
 import type { InventoryNode } from "@/lib/types";
-import { Alert, Badge, Button, Dialog, Input, Select } from "./AntUi";
+import { Alert, Badge, Button, Dialog, Input, Segmented, Select, Skeleton } from "./AntUi";
 import { InventoryActionDialog } from "./InventoryActionDialog";
+import { NodeCard } from "./NodeCard";
 
 export function AddContentsDialog({
   open,
@@ -22,6 +30,7 @@ export function AddContentsDialog({
   const [tagId, setTagId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "card">("list");
   const [cursor, setCursor] = useState("");
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -166,68 +175,110 @@ export function AddContentsDialog({
               ))}
             </Select>
           </div>
-          <div className="overflow-x-auto">
-            <Table<InventoryNode>
-              rowKey="id"
-              loading={itemsQuery.isLoading || itemsQuery.isFetching}
-              pagination={false}
-              dataSource={items}
-              scroll={{ x: 620, y: 360 }}
-              rowSelection={{
-                selectedRowKeys: selected.map((item) => item.id),
-                preserveSelectedRowKeys: true,
-                onSelect: (item, checked) => setSelected((current) =>
-                  checked
-                    ? [...current.filter((entry) => entry.id !== item.id), item]
-                    : current.filter((entry) => entry.id !== item.id),
-                ),
-                onSelectAll: (checked, _, changedRows) => setSelected((current) =>
-                  checked
-                    ? [
-                        ...current.filter((entry) => !changedRows.some((row) => row.id === entry.id)),
-                        ...changedRows,
-                      ]
-                    : current.filter((entry) => !changedRows.some((row) => row.id === entry.id)),
-                ),
-              }}
-              columns={[
-                { title: "名称", dataIndex: "name", key: "name", ellipsis: true },
-                {
-                  title: "类型",
-                  dataIndex: "type",
-                  key: "type",
-                  width: 84,
-                  render: (type: InventoryNode["type"]) => typeName[type],
-                },
-                {
-                  title: "编号",
-                  dataIndex: "code",
-                  key: "code",
-                  width: 120,
-                  render: (code: string) => <span className="font-mono text-xs">{code}</span>,
-                },
-                {
-                  title: "分类",
-                  key: "category",
-                  width: 150,
-                  render: (_, item) => (
-                    <div className="flex flex-wrap gap-1">
-                      {item.categories?.length
-                        ? item.categories.map((category) => <Badge key={category.id} variant="outline">{category.name}</Badge>)
-                        : "—"}
-                    </div>
-                  ),
-                },
-                {
-                  title: "当前位置",
-                  key: "location",
-                  width: 160,
-                  ellipsis: true,
-                  render: (_, item) => item.path?.map((entry) => entry.name).join(" / ") || "暂存区",
-                },
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              当前页 {items.length} 个，已选择 {selected.length} 个
+            </span>
+            <Segmented
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: "list", label: "列表" },
+                { value: "card", label: "卡片" },
               ]}
             />
           </div>
+          {viewMode === "list" ? (
+            <div className="overflow-x-auto">
+              <Table<InventoryNode>
+                rowKey="id"
+                loading={itemsQuery.isLoading || itemsQuery.isFetching}
+                pagination={false}
+                dataSource={items}
+                scroll={{ x: 620, y: 360 }}
+                rowSelection={{
+                  selectedRowKeys: selected.map((item) => item.id),
+                  preserveSelectedRowKeys: true,
+                  onSelect: (item, checked) => toggleSelected(item, checked, setSelected),
+                  onSelectAll: (checked, _, changedRows) => setSelected((current) =>
+                    checked
+                      ? [
+                          ...current.filter((entry) => !changedRows.some((row) => row.id === entry.id)),
+                          ...changedRows,
+                        ]
+                      : current.filter((entry) => !changedRows.some((row) => row.id === entry.id)),
+                  ),
+                }}
+                columns={[
+                  { title: "名称", dataIndex: "name", key: "name", ellipsis: true },
+                  {
+                    title: "类型",
+                    dataIndex: "type",
+                    key: "type",
+                    width: 84,
+                    render: (type: InventoryNode["type"]) => typeName[type],
+                  },
+                  {
+                    title: "编号",
+                    dataIndex: "code",
+                    key: "code",
+                    width: 120,
+                    render: (code: string) => <span className="font-mono text-xs">{code}</span>,
+                  },
+                  {
+                    title: "分类",
+                    key: "category",
+                    width: 150,
+                    render: (_, item) => (
+                      <div className="flex flex-wrap gap-1">
+                        {item.categories?.length
+                          ? item.categories.map((category) => <Badge key={category.id} variant="outline">{category.name}</Badge>)
+                          : "—"}
+                      </div>
+                    ),
+                  },
+                  {
+                    title: "当前位置",
+                    key: "location",
+                    width: 160,
+                    ellipsis: true,
+                    render: (_, item) => item.path?.map((entry) => entry.name).join(" / ") || "暂存区",
+                  },
+                ]}
+              />
+            </div>
+          ) : itemsQuery.isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+            </div>
+          ) : items.length ? (
+            <div className="grid max-h-[360px] gap-3 overflow-y-auto p-0.5 sm:grid-cols-2">
+              {items.map((item) => {
+                const isSelected = selected.some((entry) => entry.id === item.id);
+                return (
+                  <div key={item.id} className="relative min-w-0">
+                    <NodeCard
+                      node={item}
+                      selectable
+                      selected={isSelected}
+                      onSelect={() => toggleSelected(item, !isSelected, setSelected)}
+                    />
+                    {isSelected && (
+                      <CheckCircle2
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-2 top-2 z-10 size-6 fill-primary text-primary-foreground"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid min-h-36 place-items-center rounded-md border border-dashed text-sm text-muted-foreground">
+              没有符合条件的可添加内容
+            </div>
+          )}
           {itemsQuery.isError && (
             <Alert title="无法查询可添加内容" tone="error">
               {errorMessage(itemsQuery.error)}
@@ -263,3 +314,13 @@ const typeName: Record<InventoryNode["type"], string> = {
   BAG: "袋子",
   ITEM: "物品",
 };
+
+function toggleSelected(
+  item: InventoryNode,
+  checked: boolean,
+  setSelected: Dispatch<SetStateAction<InventoryNode[]>>,
+) {
+  setSelected((current) => checked
+    ? [...current.filter((entry) => entry.id !== item.id), item]
+    : current.filter((entry) => entry.id !== item.id));
+}
