@@ -1,15 +1,19 @@
 import { useState } from "react";
+import { Dropdown } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { FolderTree, Plus, Warehouse } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useMediaQuery } from "@/lib/media";
 import { pageItems, queries } from "@/lib/queries";
 import type { NodeType } from "@/lib/types";
 import { NodeCard } from "@/components/NodeCard";
 import { QueryError } from "@/components/Page";
-import { Alert, EmptyState, Segmented, Skeleton } from "@/components/AntUi";
+import { Alert, Button, EmptyState, Segmented, Skeleton } from "@/components/AntUi";
 
 type LocationFilter = "ALL" | Exclude<NodeType, "ITEM">;
 export function LocationsPage() {
+  const mobile = useMediaQuery("(max-width: 767px)");
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [filter, setFilter] = useState<LocationFilter>("ALL");
   const stagingMode = params.get("staging") === "true";
@@ -37,7 +41,7 @@ export function LocationsPage() {
   const error = query.error || stagingContents.error;
   return (
     <div>
-      <div className="page-toolbar">
+      <div className="page-toolbar location-toolbar">
         {!stagingMode && (
           <div className="page-toolbar__filters">
             <Segmented
@@ -53,6 +57,25 @@ export function LocationsPage() {
           </div>
         )}
         <div className="page-toolbar__actions">
+        {mobile ? (
+          <Dropdown
+            trigger={["click"]}
+            placement="bottomRight"
+            menu={{
+              items: [
+                { key: "WAREHOUSE", label: "添加仓库" },
+                { key: "BOX", label: "添加箱子" },
+                { key: "BAG", label: "添加袋子" },
+              ],
+              onClick: ({ key }) => navigate(`/locations/new?type=${key}`),
+            }}
+          >
+            <Button aria-label="添加位置" aria-haspopup="menu">
+              <Plus className="size-4" />添加
+            </Button>
+          </Dropdown>
+        ) : (
+        <>
         <Link
           to="/locations/new?type=WAREHOUSE"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
@@ -74,6 +97,8 @@ export function LocationsPage() {
           <Plus className="size-4" />
           袋子
         </Link>
+        </>
+        )}
         </div>
       </div>
       {loading ? (

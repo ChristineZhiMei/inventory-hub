@@ -583,6 +583,34 @@ body {
   overflow-x: auto;
 }
 
+.location-toolbar {
+  @media (max-width: 767px) {
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+
+    .page-toolbar__filters {
+      flex: 1 1 auto;
+    }
+
+    .page-toolbar__actions {
+      flex: 0 0 auto;
+    }
+
+    .ant-segmented-item-label {
+      min-height: 44px;
+      padding-inline: 8px;
+      line-height: 44px;
+      font-size: var(--font-sm);
+    }
+
+    .app-button {
+      padding-inline: 10px;
+      gap: 4px;
+      font-size: var(--font-sm);
+    }
+  }
+}
+
 .page-toolbar__actions {
   display: flex;
   flex-wrap: wrap;

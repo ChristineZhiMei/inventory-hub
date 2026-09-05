@@ -13,7 +13,7 @@ import {
   Tag,
   type ButtonProps as AntButtonProps,
 } from "antd";
-import { Popup, Selector } from "antd-mobile";
+import { Popup } from "antd-mobile";
 import {
   Children,
   cloneElement,
@@ -416,18 +416,6 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
   className?: string;
 }) {
-  const mobile = useMediaQuery("(max-width: 767px)");
-  if (mobile) {
-    return (
-      <Selector
-        className={cn("app-mobile-selector", className)}
-        columns={options.length}
-        options={options}
-        value={[value]}
-        onChange={(next) => next[0] && onChange(next[0] as T)}
-      />
-    );
-  }
   return (
     <AntSegmented
       className={className}
