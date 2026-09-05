@@ -43,6 +43,8 @@ export class InventoryDatabase {
     this.db.exec(schemaSql);
     this.migrateLegacyCategories();
     this.migrateLegacySpecifications();
+    this.migrateCombinedSpecifications();
+    this.migrateSystemIdentifierTaxonomies();
     const now = Date.now();
     this.db.prepare("INSERT OR IGNORE INTO code_sequences(prefix,next_value) VALUES ('W',1),('C',1),('I',1)").run();
     const settings = this.db.prepare("SELECT singleton_id FROM system_settings WHERE singleton_id=1").get();
@@ -69,25 +71,132 @@ export class InventoryDatabase {
 
   private migrateLegacySpecifications(): void {
     const rows = this.db.prepare(`SELECT node_id nodeId,trim(specification) name
-      FROM item_profiles WHERE trim(specification)<>'' ORDER BY node_id`).all() as Array<{ nodeId: string; name: string }>;
+      FROM item_profiles p WHERE trim(specification)<>'' AND NOT EXISTS(
+        SELECT 1 FROM node_specifications ns WHERE ns.node_id=p.node_id
+      ) ORDER BY node_id`).all() as Array<{ nodeId: string; name: string }>;
     if (!rows.length) return;
     const select = this.db.prepare("SELECT id FROM specifications WHERE normalized_name=?");
     const insert = this.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at)
       VALUES(?,?,?,1,?,?)`);
     const attach = this.db.prepare(`INSERT OR IGNORE INTO node_specifications(node_id,specification_id,sort_order)
-      VALUES(?,?,0)`);
+      VALUES(?,?,?)`);
     this.db.transaction(() => {
       for (const row of rows) {
-        const normalizedName = row.name.normalize("NFKC").trim().replace(/\s+/g, " ");
-        const normalizedKey = normalizedName.toLocaleLowerCase("zh-CN");
-        let specification = select.get(normalizedKey) as { id: string } | undefined;
-        if (!specification) {
-          const id = randomUUID();
-          const now = Date.now();
-          insert.run(id, normalizedName, normalizedKey, now, now);
-          specification = { id };
+        for (const [index, normalizedName] of splitSpecificationNames(row.name).entries()) {
+          const normalizedKey = normalizedName.toLocaleLowerCase("zh-CN");
+          let specification = select.get(normalizedKey) as { id: string } | undefined;
+          if (!specification) {
+            const id = randomUUID();
+            const now = Date.now();
+            insert.run(id, normalizedName, normalizedKey, now, now);
+            specification = { id };
+          }
+          attach.run(row.nodeId, specification.id, index);
         }
-        attach.run(row.nodeId, specification.id);
+      }
+    })();
+  }
+
+  private migrateCombinedSpecifications(): void {
+    const combined = this.db.prepare(`SELECT id,name FROM specifications
+      WHERE instr(name,'/')>0 OR instr(name,'／')>0 ORDER BY id`).all() as Array<{
+      id: string;
+      name: string;
+    }>;
+    if (!combined.length) return;
+    const select = this.db.prepare("SELECT id FROM specifications WHERE normalized_name=?");
+    const insert = this.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at)
+      VALUES(?,?,?,1,?,?)`);
+    const references = this.db.prepare(`SELECT node_id nodeId,sort_order sortOrder
+      FROM node_specifications WHERE specification_id=? ORDER BY node_id,sort_order`);
+    const detach = this.db.prepare(
+      "DELETE FROM node_specifications WHERE node_id=? AND specification_id=?",
+    );
+    const attach = this.db.prepare(`INSERT OR IGNORE INTO node_specifications(node_id,specification_id,sort_order)
+      VALUES(?,?,?)`);
+    const remove = this.db.prepare("DELETE FROM specifications WHERE id=?");
+    const itemSpecifications = this.db.prepare(`SELECT s.name FROM specifications s
+      JOIN node_specifications ns ON ns.specification_id=s.id
+      WHERE ns.node_id=? ORDER BY ns.sort_order,s.name,s.id`);
+    const updateLegacy = this.db.prepare(
+      "UPDATE item_profiles SET specification=? WHERE node_id=?",
+    );
+    this.db.transaction(() => {
+      const affectedNodes = new Set<string>();
+      for (const source of combined) {
+        const names = splitSpecificationNames(source.name);
+        const rows = references.all(source.id) as Array<{
+          nodeId: string;
+          sortOrder: number;
+        }>;
+        for (const row of rows) {
+          detach.run(row.nodeId, source.id);
+          affectedNodes.add(row.nodeId);
+          for (const [index, name] of names.entries()) {
+            const key = name.toLocaleLowerCase("zh-CN");
+            let target = select.get(key) as { id: string } | undefined;
+            if (!target) {
+              const id = randomUUID();
+              const now = Date.now();
+              insert.run(id, name, key, now, now);
+              target = { id };
+            }
+            attach.run(row.nodeId, target.id, row.sortOrder + index);
+          }
+        }
+        remove.run(source.id);
+      }
+      for (const nodeId of affectedNodes) {
+        const legacyValue = (itemSpecifications.all(nodeId) as Array<{ name: string }>)
+          .map((item) => item.name)
+          .join(" / ")
+          .slice(0, 500);
+        updateLegacy.run(legacyValue, nodeId);
+      }
+    })();
+  }
+
+  private migrateSystemIdentifierTaxonomies(): void {
+    const invalidTags = (this.db.prepare("SELECT id,name FROM tags ORDER BY id").all() as Array<{
+      id: string;
+      name: string;
+    }>).filter((row) => SYSTEM_ID_PATTERN.test(row.name.trim()));
+    const invalidSpecifications = (
+      this.db.prepare("SELECT id,name FROM specifications ORDER BY id").all() as Array<{
+        id: string;
+        name: string;
+      }>
+    ).filter((row) => SYSTEM_ID_PATTERN.test(row.name.trim()));
+    if (!invalidTags.length && !invalidSpecifications.length) return;
+
+    const referencedSpecificationNodes = this.db.prepare(
+      "SELECT node_id nodeId FROM node_specifications WHERE specification_id=? ORDER BY node_id",
+    );
+    const removeTag = this.db.prepare("DELETE FROM tags WHERE id=?");
+    const removeSpecification = this.db.prepare("DELETE FROM specifications WHERE id=?");
+    const itemSpecifications = this.db.prepare(`SELECT s.name FROM specifications s
+      JOIN node_specifications ns ON ns.specification_id=s.id
+      WHERE ns.node_id=? ORDER BY ns.sort_order,s.name,s.id`);
+    const updateLegacy = this.db.prepare(
+      "UPDATE item_profiles SET specification=? WHERE node_id=?",
+    );
+
+    this.db.transaction(() => {
+      const affectedNodes = new Set<string>();
+      for (const tag of invalidTags) removeTag.run(tag.id);
+      for (const specification of invalidSpecifications) {
+        const rows = referencedSpecificationNodes.all(specification.id) as Array<{
+          nodeId: string;
+        }>;
+        rows.forEach(({ nodeId }) => affectedNodes.add(nodeId));
+        removeSpecification.run(specification.id);
+      }
+      for (const nodeId of affectedNodes) {
+        const legacyValue = (itemSpecifications.all(nodeId) as Array<{ name: string }>)
+          .map((item) => item.name)
+          .join(" / ")
+          .slice(0, 500);
+        updateLegacy.run(legacyValue, nodeId);
       }
     })();
   }
@@ -147,3 +256,15 @@ const stableStringify = (value: unknown): string => {
   }
   return JSON.stringify(value);
 };
+
+const splitSpecificationNames = (value: string): string[] => [
+  ...new Set(
+    value
+      .split(/[／/]/)
+      .map((item) => item.normalize("NFKC").trim().replace(/\s+/g, " "))
+      .filter(Boolean),
+  ),
+];
+
+const SYSTEM_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

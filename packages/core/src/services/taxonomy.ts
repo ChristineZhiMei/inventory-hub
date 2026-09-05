@@ -4,6 +4,9 @@ import { normalizedKey, normalizeName } from "../domain/model.js";
 import { AppError, invariant } from "../errors.js";
 import type { IdempotencyService, RequestIdentity } from "./idempotency.js";
 
+const SYSTEM_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class TaxonomyService {
   constructor(private readonly database: InventoryDatabase, private readonly idempotency: IdempotencyService) {}
 
@@ -102,11 +105,12 @@ export class TaxonomyService {
 
   createTag(identity: RequestIdentity, name: string): any {
     return this.write(identity, () => {
+      const normalizedName = taxonomyDisplayName(name, "标签");
       const id = randomUUID();
       const now = Date.now();
       this.database.db.prepare("INSERT INTO tags(id,name,normalized_name,version,created_at,updated_at) VALUES(?,?,?,1,?,?)")
-        .run(id, normalizeName(name), normalizedKey(name), now, now);
-      const value = { id, name: normalizeName(name), version: 1 };
+        .run(id, normalizedName, normalizedKey(normalizedName), now, now);
+      const value = { id, name: normalizedName, version: 1 };
       this.log(identity, "TAG_CREATE", "TAG", id, null, value);
       return value;
     });
@@ -116,8 +120,9 @@ export class TaxonomyService {
     return this.write(identity, () => {
       const current = this.getTag(id);
       invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "标签已被修改");
+      const normalizedName = taxonomyDisplayName(input.name, "标签");
       this.database.db.prepare("UPDATE tags SET name=?,normalized_name=?,version=version+1,updated_at=? WHERE id=?")
-        .run(normalizeName(input.name), normalizedKey(input.name), Date.now(), id);
+        .run(normalizedName, normalizedKey(normalizedName), Date.now(), id);
       const updated = this.getTag(id);
       this.log(identity, "TAG_EDIT", "TAG", id, current, updated);
       return updated;
@@ -160,7 +165,7 @@ export class TaxonomyService {
 
   createSpecification(identity: RequestIdentity, name: string): any {
     return this.write(identity, () => {
-      const normalizedName = normalizeName(name);
+      const normalizedName = taxonomyDisplayName(name, "规格");
       invariant(
         !this.database.db.prepare("SELECT 1 FROM specifications WHERE normalized_name=?").get(normalizedKey(normalizedName)),
         "REFERENCE_CONFLICT",
@@ -180,7 +185,7 @@ export class TaxonomyService {
     return this.write(identity, () => {
       const current = this.getSpecification(id);
       invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "规格已被修改");
-      const name = normalizeName(input.name);
+      const name = taxonomyDisplayName(input.name, "规格");
       const duplicate = this.database.db.prepare("SELECT id FROM specifications WHERE normalized_name=? AND id<>?")
         .get(normalizedKey(name), id);
       invariant(!duplicate, "REFERENCE_CONFLICT", "该规格已经存在");
@@ -268,6 +273,23 @@ export class TaxonomyService {
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), identity.requestId, identity.userId, "WEB", action, subjectType, subjectId,
       before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, `${action} ${displayName}`, Date.now());
   }
+}
+
+function taxonomyDisplayName(value: string, kind: "标签" | "规格"): string {
+  const name = normalizeName(value);
+  invariant(
+    !SYSTEM_ID_PATTERN.test(name),
+    "VALIDATION_ERROR",
+    `${kind}名称不能使用系统标识格式`,
+  );
+  if (kind === "规格") {
+    invariant(
+      !/[／/]/.test(name),
+      "VALIDATION_ERROR",
+      "规格名称不能包含斜杠，请分别创建多个规格",
+    );
+  }
+  return name;
 }
 
 const taxonomyName = (value: unknown): string => {

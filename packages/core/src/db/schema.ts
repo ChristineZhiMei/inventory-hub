@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (

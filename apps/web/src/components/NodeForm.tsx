@@ -10,6 +10,9 @@ import type { InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
 import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
 import { ImageManager, type EditableImage } from "./ImageManager";
 
+const SYSTEM_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const schema = z.object({
   name: z.string().trim().min(1, "请输入名称").max(120, "名称最多 120 个字符"),
   categoryIds: z.array(z.string()).max(3, "每个档案最多选择三个分类"),
@@ -58,8 +61,8 @@ export function NodeForm({
     })),
   );
   const queryClient = useQueryClient();
-  const [createdTags, setCreatedTags] = useState<Tag[]>([]);
-  const [createdSpecifications, setCreatedSpecifications] = useState<Specification[]>([]);
+  const [retainedTags, setRetainedTags] = useState<Tag[]>([]);
+  const [retainedSpecifications, setRetainedSpecifications] = useState<Specification[]>([]);
   const [specificationSearchInput, setSpecificationSearchInput] = useState("");
   const [specificationSearch, setSpecificationSearch] = useState("");
   const [creatingTaxonomy, setCreatingTaxonomy] = useState<"tag" | "specification" | null>(null);
@@ -120,8 +123,8 @@ export function NodeForm({
     return () => window.clearTimeout(timer);
   }, [specificationSearchInput]);
   const tagOptions = useMemo(
-    () => mergeTaxonomyOptions(initial?.tags, prefill?.tags, pageItems(tags.data), createdTags),
-    [createdTags, initial?.tags, prefill?.tags, tags.data],
+    () => mergeTaxonomyOptions(initial?.tags, prefill?.tags, pageItems(tags.data), retainedTags),
+    [initial?.tags, prefill?.tags, retainedTags, tags.data],
   );
   const categoryOptions = useMemo(
     () => mergeTaxonomyOptions(initial?.categories, prefill?.categories, pageItems(categories.data)),
@@ -132,12 +135,12 @@ export function NodeForm({
       initial?.specifications,
       prefill?.specifications,
       specifications.data?.pages.flatMap((page) => page.items),
-      createdSpecifications,
+      retainedSpecifications,
     ),
     [
-      createdSpecifications,
       initial?.specifications,
       prefill?.specifications,
+      retainedSpecifications,
       specifications.data?.pages,
     ],
   );
@@ -165,6 +168,9 @@ export function NodeForm({
     values: string[],
   ) {
     const knownOptions = kind === "tag" ? tagOptions : specificationOptions;
+    const previouslySelectedIds = new Set(
+      form.getValues(kind === "tag" ? "tagIds" : "specificationIds"),
+    );
     const selectedIds: string[] = [];
     try {
       setCreatingTaxonomy(kind);
@@ -177,18 +183,38 @@ export function NodeForm({
         );
         if (existing) {
           selectedIds.push(existing.id);
+          if (kind === "tag") {
+            setRetainedTags((current) =>
+              mergeTaxonomyOptions(current, [existing as Tag]),
+            );
+          } else {
+            setRetainedSpecifications((current) =>
+              mergeTaxonomyOptions(current, [existing as Specification]),
+            );
+          }
           continue;
         }
         if (!candidate) continue;
+        if (SYSTEM_ID_PATTERN.test(candidate)) {
+          if (previouslySelectedIds.has(value)) {
+            selectedIds.push(value);
+            continue;
+          }
+          throw new Error(
+            `${kind === "tag" ? "标签" : "规格"}名称不能使用系统标识格式`,
+          );
+        }
         const created = await api<Tag | Specification>(
           kind === "tag" ? "/tags" : "/specifications",
           { method: "POST", idempotent: true, body: { name: candidate } },
         );
         selectedIds.push(created.id);
         if (kind === "tag") {
-          setCreatedTags((current) => mergeTaxonomyOptions(current, [created as Tag]));
+          setRetainedTags((current) => mergeTaxonomyOptions(current, [created as Tag]));
         } else {
-          setCreatedSpecifications((current) => mergeTaxonomyOptions(current, [created as Specification]));
+          setRetainedSpecifications((current) =>
+            mergeTaxonomyOptions(current, [created as Specification]),
+          );
         }
       }
       const uniqueIds = [...new Set(selectedIds)];
@@ -370,7 +396,7 @@ export function NodeForm({
                   specifications.isFetching ? <Spin size="small" /> : "输入后按回车创建"
                 }
                 maxTagCount="responsive"
-                tokenSeparators={[",", "，"]}
+                tokenSeparators={[",", "，", "/", "／"]}
                 allowClear
               />
           </Field>
