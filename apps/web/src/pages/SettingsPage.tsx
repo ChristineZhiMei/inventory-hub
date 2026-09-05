@@ -525,7 +525,13 @@ function LanSettings() {
           <CardContent>
             <div className="grid gap-5 md:grid-cols-[184px_minmax(0,1fr)] md:items-start">
               <div className="w-fit rounded-xl bg-white p-3">
-                <QRCode value={certificateInstallUrl} size={160} bordered={false} />
+                <QRCode
+                  value={certificateInstallUrl}
+                  size={160}
+                  bordered={false}
+                  bgColor="#ffffff"
+                  color="#000000"
+                />
               </div>
               <div className="min-w-0 space-y-4">
                 <p className="text-sm text-muted-foreground">

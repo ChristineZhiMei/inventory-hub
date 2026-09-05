@@ -41,25 +41,25 @@ export function DashboardPage() {
       label: "物品",
       value: data?.counts.items,
       icon: Archive,
-      tone: "text-blue-600 bg-blue-50 dark:bg-blue-950/40",
+      tone: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400",
     },
     {
       label: "袋子",
       value: data?.counts.bags,
       icon: Package,
-      tone: "text-violet-600 bg-violet-50 dark:bg-violet-950/40",
+      tone: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400",
     },
     {
       label: "箱子",
       value: data?.counts.boxes,
       icon: Box,
-      tone: "text-amber-600 bg-amber-50 dark:bg-amber-950/40",
+      tone: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400",
     },
     {
       label: "仓库",
       value: data?.counts.warehouses,
       icon: Warehouse,
-      tone: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40",
+      tone: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400",
     },
   ];
   return (
