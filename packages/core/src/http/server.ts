@@ -299,6 +299,19 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     const body = z.object({ expectedVersion: z.number().int().positive(), confirmName: z.string(), referenceToken: z.string() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.deleteTag(identity, request.params.id, body)), writeRequestId(request));
   });
+  app.get("/api/v1/specifications", async (request) => success(taxonomy.specifications(request.query as Record<string, unknown>), request.id));
+  app.post("/api/v1/specifications", async (request) => {
+    const body = z.object({ name: z.string().trim().min(1).max(120) }).parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createSpecification(identity, body.name)), writeRequestId(request));
+  });
+  app.patch<{ Params: { id: string } }>("/api/v1/specifications/:id", async (request) => {
+    const body = z.object({ name: z.string().trim().min(1).max(120), expectedVersion: z.number().int().positive() }).parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.patchSpecification(identity, request.params.id, body)), writeRequestId(request));
+  });
+  app.delete<{ Params: { id: string } }>("/api/v1/specifications/:id", async (request) => {
+    const body = z.object({ expectedVersion: z.number().int().positive(), confirmName: z.string(), referenceToken: z.string() }).parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.deleteSpecification(identity, request.params.id, body)), writeRequestId(request));
+  });
 
   app.get("/api/v1/print-jobs", async (request) => success(printing.list(request.query as any), request.id));
   app.post("/api/v1/print-jobs", async (request) => {

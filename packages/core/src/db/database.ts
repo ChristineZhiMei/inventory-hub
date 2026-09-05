@@ -41,10 +41,14 @@ export class InventoryDatabase {
 
   private migrate(): void {
     this.db.exec(schemaSql);
+    this.migrateLegacySpecifications();
     const now = Date.now();
     this.db.prepare("INSERT OR IGNORE INTO code_sequences(prefix,next_value) VALUES ('W',1),('C',1),('I',1)").run();
     const settings = this.db.prepare("SELECT singleton_id FROM system_settings WHERE singleton_id=1").get();
-    if (settings) return;
+    if (settings) {
+      this.db.prepare("UPDATE system_settings SET schema_version=? WHERE singleton_id=1").run(SCHEMA_VERSION);
+      return;
+    }
     const initialize = this.db.transaction(() => {
       const rootId = randomUUID();
       const rootUuid = randomUUID();
@@ -60,6 +64,31 @@ export class InventoryDatabase {
         VALUES(1,?,?, 'ONLINE',?,?,0)`).run(stagingId, rootId, randomUUID(), SCHEMA_VERSION);
     });
     initialize();
+  }
+
+  private migrateLegacySpecifications(): void {
+    const rows = this.db.prepare(`SELECT node_id nodeId,trim(specification) name
+      FROM item_profiles WHERE trim(specification)<>'' ORDER BY node_id`).all() as Array<{ nodeId: string; name: string }>;
+    if (!rows.length) return;
+    const select = this.db.prepare("SELECT id FROM specifications WHERE normalized_name=?");
+    const insert = this.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at)
+      VALUES(?,?,?,1,?,?)`);
+    const attach = this.db.prepare(`INSERT OR IGNORE INTO node_specifications(node_id,specification_id,sort_order)
+      VALUES(?,?,0)`);
+    this.db.transaction(() => {
+      for (const row of rows) {
+        const normalizedName = row.name.normalize("NFKC").trim().replace(/\s+/g, " ");
+        const normalizedKey = normalizedName.toLocaleLowerCase("zh-CN");
+        let specification = select.get(normalizedKey) as { id: string } | undefined;
+        if (!specification) {
+          const id = randomUUID();
+          const now = Date.now();
+          insert.run(id, normalizedName, normalizedKey, now, now);
+          specification = { id };
+        }
+        attach.run(row.nodeId, specification.id);
+      }
+    })();
   }
 
   nextCode(prefix: "W" | "C" | "I"): string {

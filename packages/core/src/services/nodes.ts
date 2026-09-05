@@ -28,13 +28,14 @@ export class NodeService {
           invariant(locationToken(this.database.db, parent.id) === input.targetLocationToken, "LOCATION_CHANGED", "目标位置已变化");
         }
       }
-      this.validateTaxonomy(input.categoryId, input.tagIds, input.type);
+      this.validateTaxonomy(input.categoryId, input.tagIds, input.specificationIds, input.type);
       this.database.db.prepare(`INSERT INTO nodes(id,code,type,parent_id,stock_status,name,notes,version,location_version,is_system_staging,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,1,1,0,?,?)`).run(reservation.nodeId, reservation.code, input.type, parentId,
         input.type === "WAREHOUSE" ? null : "IN_STOCK", normalizeName(input.name), input.notes ?? "", now, now);
       if (input.type === "ITEM") this.database.db.prepare("INSERT INTO item_profiles(node_id,category_id,specification) VALUES(?,?,?)")
-        .run(reservation.nodeId, input.categoryId, input.specification ?? "");
+        .run(reservation.nodeId, input.categoryId, "");
       this.replaceTags(reservation.nodeId, input.tagIds);
+      if (input.type === "ITEM") this.replaceSpecifications(reservation.nodeId, input.specificationIds);
       this.media.insertPrepared(reservation.nodeId, prepared);
       this.database.db.prepare("UPDATE code_reservations SET state='ACTIVE',updated_at=? WHERE code=?").run(now, reservation.code);
       const node = getNode(this.database.db, reservation.nodeId);
@@ -64,12 +65,13 @@ export class NodeService {
       const before = snapshotNode(this.database.db, node);
       const now = Date.now();
       if (input.categoryId !== undefined) invariant(node.type === "ITEM", "VALIDATION_ERROR", "只有物品可设置分类");
-      this.validateTaxonomy(input.categoryId, input.tagIds ?? [], node.type, input.categoryId === undefined);
+      this.validateTaxonomy(input.categoryId, input.tagIds ?? [], input.specificationIds ?? [], node.type, input.categoryId === undefined);
       this.database.db.prepare(`UPDATE nodes SET name=COALESCE(?,name),notes=COALESCE(?,notes),version=version+1,updated_at=? WHERE id=?`)
         .run(input.name === undefined ? null : normalizeName(input.name), input.notes ?? null, now, nodeId);
-      if (node.type === "ITEM") this.database.db.prepare(`UPDATE item_profiles SET category_id=COALESCE(?,category_id),specification=COALESCE(?,specification) WHERE node_id=?`)
-        .run(input.categoryId ?? null, input.specification ?? null, nodeId);
+      if (node.type === "ITEM") this.database.db.prepare(`UPDATE item_profiles SET category_id=COALESCE(?,category_id) WHERE node_id=?`)
+        .run(input.categoryId ?? null, nodeId);
       if (input.tagIds) this.replaceTags(nodeId, input.tagIds);
+      if (input.specificationIds) this.replaceSpecifications(nodeId, input.specificationIds);
       if (input.images) this.replaceImages(node, input.images, prepared);
       const afterNode = getNode(this.database.db, nodeId);
       const operationId = this.logOperation(identity.requestId, identity.userId, "EDIT_PROFILE", afterNode, before, snapshotNode(this.database.db, afterNode), true, undefined);
@@ -119,12 +121,14 @@ export class NodeService {
     const itemProfile = node.type === "ITEM" ? this.database.db.prepare(`SELECT p.category_id categoryId,p.specification,c.name categoryName
       FROM item_profiles p JOIN categories c ON c.id=p.category_id WHERE p.node_id=?`).get(nodeId) : null;
     const tags = this.database.db.prepare(`SELECT t.id,t.name,t.version FROM tags t JOIN node_tags nt ON nt.tag_id=t.id WHERE nt.node_id=? ORDER BY t.name`).all(nodeId);
+    const specifications = this.specificationsForNode(nodeId);
     return {
       ...serializeNode(this.database.db, node),
       itemProfile,
       categoryId: (itemProfile as any)?.categoryId ?? null,
       category: itemProfile ? { id: (itemProfile as any).categoryId, name: (itemProfile as any).categoryName } : null,
-      specification: (itemProfile as any)?.specification ?? null,
+      specification: specifications.map((item) => item.name).join(" / ") || null,
+      specifications,
       tags,
       images: this.media.listForNode(nodeId),
     };
@@ -149,8 +153,9 @@ export class NodeService {
       const pattern = `%${String(query.q).trim()}%`;
       where.push(`(n.code LIKE ? OR n.name LIKE ?
         OR EXISTS(SELECT 1 FROM node_tags qnt JOIN tags qt ON qt.id=qnt.tag_id WHERE qnt.node_id=n.id AND qt.name LIKE ?)
+        OR EXISTS(SELECT 1 FROM node_specifications qns JOIN specifications qs ON qs.id=qns.specification_id WHERE qns.node_id=n.id AND qs.name LIKE ?)
         OR EXISTS(SELECT 1 FROM categories qc WHERE qc.id=p.category_id AND qc.name LIKE ?))`);
-      params.push(pattern, pattern, pattern, pattern);
+      params.push(pattern, pattern, pattern, pattern, pattern);
     }
     if (query.status) { where.push("n.stock_status=?"); params.push(String(query.status)); }
     if (query.categoryId) {
@@ -172,7 +177,10 @@ export class NodeService {
     const rows = this.database.db.prepare(`${nodeSelect.replace(" FROM nodes", ",p.category_id categoryId,p.specification FROM nodes")} n JOIN item_profiles p ON p.node_id=n.id
       WHERE ${where.join(" AND ")} ORDER BY n.created_at DESC,n.id DESC LIMIT ? OFFSET ?`).all(...params, limit + 1, offset) as any[];
     const hasMore = rows.length > limit;
-    return { items: rows.slice(0, limit).map((node) => ({ ...serializeNode(this.database.db, node), categoryId: node.categoryId, specification: node.specification, tags: this.tagsForNode(node.id), images: this.media.listForNode(node.id) })), nextCursor: hasMore ? encodeCursor(offset + limit) : null };
+    return { items: rows.slice(0, limit).map((node) => {
+      const specifications = this.specificationsForNode(node.id);
+      return { ...serializeNode(this.database.db, node), categoryId: node.categoryId, specification: specifications.map((item) => item.name).join(" / ") || null, specifications, tags: this.tagsForNode(node.id), images: this.media.listForNode(node.id) };
+    }), nextCursor: hasMore ? encodeCursor(offset + limit) : null };
   }
 
   listLocations(query: Record<string, unknown>): any {
@@ -281,7 +289,7 @@ export class NodeService {
     });
   }
 
-  private validateTaxonomy(categoryId: string | undefined, tagIds: string[], type: NodeType, categoryUnchanged = false): void {
+  private validateTaxonomy(categoryId: string | undefined, tagIds: string[], specificationIds: string[], type: NodeType, categoryUnchanged = false): void {
     if (type === "ITEM" && !categoryUnchanged) invariant(Boolean(categoryId && this.database.db.prepare("SELECT 1 FROM categories WHERE id=?").get(categoryId)), "VALIDATION_ERROR", "分类不存在");
     const uniqueTags = [...new Set(tagIds)];
     invariant(uniqueTags.length === tagIds.length, "VALIDATION_ERROR", "标签不能重复");
@@ -290,6 +298,11 @@ export class NodeService {
       const count = (this.database.db.prepare(`SELECT count(*) count FROM tags WHERE id IN (${placeholders})`).get(...uniqueTags) as any).count;
       invariant(count === uniqueTags.length, "VALIDATION_ERROR", "包含不存在的标签");
     }
+    const uniqueSpecifications = [...new Set(specificationIds)];
+    invariant(uniqueSpecifications.length === specificationIds.length, "VALIDATION_ERROR", "规格不能重复");
+    invariant(type === "ITEM" || uniqueSpecifications.length === 0, "VALIDATION_ERROR", "只有物品可以设置规格");
+    const findSpecification = this.database.db.prepare("SELECT 1 FROM specifications WHERE id=?");
+    invariant(uniqueSpecifications.every((id) => Boolean(findSpecification.get(id))), "VALIDATION_ERROR", "包含不存在的规格");
   }
 
   private replaceTags(nodeId: string, tagIds: string[]): void {
@@ -301,6 +314,21 @@ export class NodeService {
   private tagsForNode(nodeId: string): any[] {
     return this.database.db.prepare(`SELECT t.id,t.name,t.version FROM tags t JOIN node_tags nt ON nt.tag_id=t.id
       WHERE nt.node_id=? ORDER BY t.name,t.id`).all(nodeId);
+  }
+
+  private replaceSpecifications(nodeId: string, specificationIds: string[]): void {
+    this.database.db.prepare("DELETE FROM node_specifications WHERE node_id=?").run(nodeId);
+    const insert = this.database.db.prepare(`INSERT INTO node_specifications(node_id,specification_id,sort_order)
+      VALUES(?,?,?)`);
+    [...new Set(specificationIds)].forEach((specificationId, index) => insert.run(nodeId, specificationId, index));
+    const legacyValue = this.specificationsForNode(nodeId).map((item) => item.name).join(" / ").slice(0, 500);
+    this.database.db.prepare("UPDATE item_profiles SET specification=? WHERE node_id=?").run(legacyValue, nodeId);
+  }
+
+  private specificationsForNode(nodeId: string): any[] {
+    return this.database.db.prepare(`SELECT s.id,s.name,s.version FROM specifications s
+      JOIN node_specifications ns ON ns.specification_id=s.id
+      WHERE ns.node_id=? ORDER BY ns.sort_order,s.name,s.id`).all(nodeId);
   }
 
   private replaceImages(node: any, entries: NonNullable<PatchProfileInput["images"]>, prepared: PreparedImage[]): void {

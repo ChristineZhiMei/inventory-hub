@@ -78,6 +78,7 @@ export const CreateNodeSchema = z.object({
   tagIds: z.array(IdSchema).max(20).default([]),
   categoryId: IdSchema.optional(),
   specification: z.string().trim().max(500).optional().default(""),
+  specificationIds: z.array(IdSchema).default([]),
   uploadIds: z.array(IdSchema).max(5).default([]),
   createMode: z.enum(["STAGE", "PLACE"]),
   targetId: IdSchema.optional(),
@@ -113,6 +114,7 @@ export const PatchProfileSchema = z.object({
   tagIds: z.array(IdSchema).max(20).optional(),
   categoryId: IdSchema.optional(),
   specification: z.string().trim().max(500).optional(),
+  specificationIds: z.array(IdSchema).optional(),
   images: z.array(ImageSetEntrySchema).min(0).max(5).optional(),
 }).refine((value) => Object.keys(value).some((key) => key !== "expectedVersion"), {
   message: "至少提供一个待更新字段",

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS categories (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS categories_parent ON categories(parent_id, id);
 CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE,
+  version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS specifications (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE,
   version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 ) STRICT;
@@ -53,6 +57,13 @@ CREATE TABLE IF NOT EXISTS node_tags (
   PRIMARY KEY(node_id, tag_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS node_tags_tag ON node_tags(tag_id, node_id);
+CREATE TABLE IF NOT EXISTS node_specifications (
+  node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  specification_id TEXT NOT NULL REFERENCES specifications(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0),
+  PRIMARY KEY(node_id, specification_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS node_specifications_specification ON node_specifications(specification_id, node_id);
 
 CREATE TABLE IF NOT EXISTS code_sequences (
   prefix TEXT PRIMARY KEY CHECK(prefix IN ('W','C','I')), next_value INTEGER NOT NULL CHECK(next_value > 0)

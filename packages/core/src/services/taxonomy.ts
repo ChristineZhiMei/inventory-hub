@@ -129,6 +129,75 @@ export class TaxonomyService {
     });
   }
 
+  specifications(query: Record<string, unknown>): { items: any[]; nextCursor: string | null } {
+    const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
+    const offset = decodeCursor(query.cursor);
+    const search = String(query.q ?? "").normalize("NFKC").trim();
+    invariant(search.length <= 120, "VALIDATION_ERROR", "规格搜索内容最多 120 个字符");
+    const where = search ? "WHERE s.name LIKE ? ESCAPE '\\'" : "";
+    const params = search ? [`%${escapeLike(search)}%`] : [];
+    const rows = this.database.db.prepare(`SELECT s.id,s.name,s.version,s.created_at createdAt,s.updated_at updatedAt,
+      (SELECT count(*) FROM node_specifications ns WHERE ns.specification_id=s.id) referenceCount
+      FROM specifications s ${where} ORDER BY s.name,s.id LIMIT ? OFFSET ?`).all(...params, limit + 1, offset) as any[];
+    const items = rows.slice(0, limit).map((row) => ({
+      ...row,
+      referenceToken: this.specificationReferenceToken(row.id),
+      createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: new Date(row.updatedAt).toISOString(),
+    }));
+    return { items, nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null };
+  }
+
+  createSpecification(identity: RequestIdentity, name: string): any {
+    return this.write(identity, () => {
+      const normalizedName = normalizeName(name);
+      invariant(
+        !this.database.db.prepare("SELECT 1 FROM specifications WHERE normalized_name=?").get(normalizedKey(normalizedName)),
+        "REFERENCE_CONFLICT",
+        "该规格已经存在",
+      );
+      const id = randomUUID();
+      const now = Date.now();
+      this.database.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at)
+        VALUES(?,?,?,1,?,?)`).run(id, normalizedName, normalizedKey(normalizedName), now, now);
+      const value = { id, name: normalizedName, version: 1, referenceCount: 0 };
+      this.log(identity, "SPECIFICATION_CREATE", "SPECIFICATION", id, null, value);
+      return value;
+    });
+  }
+
+  patchSpecification(identity: RequestIdentity, id: string, input: { name: string; expectedVersion: number }): any {
+    return this.write(identity, () => {
+      const current = this.getSpecification(id);
+      invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "规格已被修改");
+      const name = normalizeName(input.name);
+      const duplicate = this.database.db.prepare("SELECT id FROM specifications WHERE normalized_name=? AND id<>?")
+        .get(normalizedKey(name), id);
+      invariant(!duplicate, "REFERENCE_CONFLICT", "该规格已经存在");
+      this.database.db.prepare(`UPDATE specifications SET name=?,normalized_name=?,version=version+1,updated_at=? WHERE id=?`)
+        .run(name, normalizedKey(name), Date.now(), id);
+      const updated = this.getSpecification(id);
+      this.log(identity, "SPECIFICATION_EDIT", "SPECIFICATION", id, current, updated);
+      return updated;
+    });
+  }
+
+  deleteSpecification(identity: RequestIdentity, id: string, input: { expectedVersion: number; confirmName: string; referenceToken: string }): any {
+    return this.write(identity, () => {
+      const current = this.getSpecification(id);
+      invariant(current.version === input.expectedVersion && current.name === input.confirmName, "VERSION_CONFLICT", "规格信息已变化");
+      invariant(this.specificationReferenceToken(id) === input.referenceToken, "REFERENCE_CONFLICT", "规格引用已变化");
+      const nodeIds = this.database.db.prepare(`SELECT node_id nodeId FROM node_specifications
+        WHERE specification_id=? ORDER BY node_id`).all(id) as any[];
+      this.database.db.prepare("DELETE FROM node_specifications WHERE specification_id=?").run(id);
+      this.database.db.prepare("DELETE FROM specifications WHERE id=?").run(id);
+      const update = this.database.db.prepare("UPDATE nodes SET version=version+1,updated_at=? WHERE id=?");
+      nodeIds.forEach(({ nodeId }) => update.run(Date.now(), nodeId));
+      this.log(identity, "SPECIFICATION_DELETE", "SPECIFICATION", id, { ...current, nodeIds }, { deleted: true });
+      return { id, deleted: true, detachedCount: nodeIds.length };
+    });
+  }
+
   private write(identity: RequestIdentity, callback: () => unknown): any {
     const replay = this.idempotency.lookup(identity);
     if (replay) return replay;
@@ -161,6 +230,12 @@ export class TaxonomyService {
     return row;
   }
 
+  private getSpecification(id: string): any {
+    const row = this.database.db.prepare("SELECT id,name,version FROM specifications WHERE id=?").get(id);
+    if (!row) throw new AppError("NOT_FOUND", "规格不存在");
+    return row;
+  }
+
   private categoryReferenceToken(id: string): string {
     const ids = this.database.db.prepare("SELECT node_id nodeId FROM item_profiles WHERE category_id=? ORDER BY node_id").all(id);
     return hash(ids);
@@ -168,6 +243,12 @@ export class TaxonomyService {
 
   private tagReferenceToken(id: string): string {
     const ids = this.database.db.prepare("SELECT node_id nodeId FROM node_tags WHERE tag_id=? ORDER BY node_id").all(id);
+    return hash(ids);
+  }
+
+  private specificationReferenceToken(id: string): string {
+    const ids = this.database.db.prepare(`SELECT node_id nodeId FROM node_specifications
+      WHERE specification_id=? ORDER BY node_id`).all(id);
     return hash(ids);
   }
 
@@ -179,3 +260,10 @@ export class TaxonomyService {
 }
 
 const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const encodeCursor = (offset: number): string => Buffer.from(JSON.stringify({ offset }), "utf8").toString("base64url");
+const decodeCursor = (cursor: unknown): number => {
+  if (!cursor) return 0;
+  try { return Math.max(0, Number(JSON.parse(Buffer.from(String(cursor), "base64url").toString("utf8")).offset) || 0); }
+  catch { throw new AppError("VALIDATION_ERROR", "分页游标无效"); }
+};
+const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (character) => `\\${character}`);
