@@ -250,20 +250,8 @@ export function IntakePage() {
     return <QueryError error={target.error} onRetry={() => target.refetch()} />;
   return (
     <div>
-      <div className="mb-3 flex justify-end">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setParams({}, { replace: true });
-            setCandidate(null);
-            setPending([]);
-          }}
-        >
-          切换目标
-        </Button>
-      </div>
       <Card className="mb-5 border-primary/30 bg-accent/30">
-        <CardContent className="flex items-center gap-4 p-4">
+        <CardContent className="flex flex-wrap items-center gap-3 p-4">
           <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Target className="size-5" />
           </div>
@@ -278,6 +266,16 @@ export function IntakePage() {
             </p>
           </div>
           <Badge variant="success">已锁定</Badge>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setParams({}, { replace: true });
+              setCandidate(null);
+              setPending([]);
+            }}
+          >
+            切换目标
+          </Button>
         </CardContent>
       </Card>
       <div className="mb-5 overflow-x-auto">

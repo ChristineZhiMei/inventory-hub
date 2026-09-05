@@ -37,7 +37,22 @@ export function LocationsPage() {
   const error = query.error || stagingContents.error;
   return (
     <div>
-      <div className="mb-3 flex flex-wrap justify-end gap-2">
+      <div className="page-toolbar">
+        {!stagingMode && (
+          <div className="page-toolbar__filters">
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "ALL", label: "全部" },
+                { value: "WAREHOUSE", label: "仓库" },
+                { value: "BOX", label: "箱子" },
+                { value: "BAG", label: "袋子" },
+              ]}
+            />
+          </div>
+        )}
+        <div className="page-toolbar__actions">
         <Link
           to="/locations/new?type=WAREHOUSE"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
@@ -59,21 +74,8 @@ export function LocationsPage() {
           <Plus className="size-4" />
           袋子
         </Link>
-      </div>
-      {!params.get("staging") && (
-        <div className="mb-5 overflow-x-auto">
-          <Segmented
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "ALL", label: "全部" },
-              { value: "WAREHOUSE", label: "仓库" },
-              { value: "BOX", label: "箱子" },
-              { value: "BAG", label: "袋子" },
-            ]}
-          />
         </div>
-      )}
+      </div>
       {loading ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {[1, 2, 3, 4].map((x) => (

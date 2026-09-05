@@ -133,9 +133,7 @@ export function ItemsPage() {
       </Select>
     </>
   );
-  return (
-    <div>
-      <div className="mb-3 flex justify-end">
+  const createAction = (
         <Link
           to="/items/new"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -143,7 +141,9 @@ export function ItemsPage() {
           <PackagePlus className="size-4" />
           新建物品
         </Link>
-      </div>
+  );
+  return (
+    <div>
       {mobile ? (
         <div className="mobile-item-filters mb-5">
           <div className="relative">
@@ -158,6 +158,7 @@ export function ItemsPage() {
             />
           </div>
           <div className="mobile-item-filters__actions">
+            {createAction}
             <Button variant="outline" onClick={() => setFilterOpen(true)}>
               <ListFilter className="size-4" />
               筛选{advancedFilterCount ? `（${advancedFilterCount}）` : ""}
@@ -172,12 +173,12 @@ export function ItemsPage() {
               ) : (
                 <Square className="size-4" />
               )}
-              {selected.length ? `已选 ${selected.length}` : "批量选择"}
+              {selected.length ? `已选 ${selected.length}` : "批量"}
             </Button>
           </div>
         </div>
       ) : (
-        <div className="surface filter-toolbar mb-5 grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(140px,180px))_auto]">
+        <div className="surface filter-toolbar mb-5 p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -202,6 +203,7 @@ export function ItemsPage() {
             )}
             {selected.length ? `已选 ${selected.length}` : "批量选择"}
           </Button>
+          {createAction}
         </div>
       )}
       {selected.length > 0 && (

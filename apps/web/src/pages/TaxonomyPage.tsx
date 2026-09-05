@@ -138,7 +138,18 @@ export function TaxonomyPage() {
       : new Set<string>();
   return (
     <div>
-      <div className="mb-3 flex justify-end">
+      <div className="page-toolbar">
+        <div className="page-toolbar__filters">
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "categories", label: "分类树" },
+              { value: "tags", label: "标签" },
+            ]}
+          />
+        </div>
+        <div className="page-toolbar__actions">
         <Button
           onClick={() =>
             openEdit({ kind: tab === "categories" ? "category" : "tag" })
@@ -147,16 +158,7 @@ export function TaxonomyPage() {
           <Plus className="size-4" />
           新建{tab === "categories" ? "分类" : "标签"}
         </Button>
-      </div>
-      <div className="mb-5">
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: "categories", label: "分类树" },
-            { value: "tags", label: "标签" },
-          ]}
-        />
+        </div>
       </div>
       {currentQuery.isLoading ? (
         <p>加载中…</p>
