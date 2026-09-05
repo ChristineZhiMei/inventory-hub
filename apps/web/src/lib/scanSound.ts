@@ -76,27 +76,34 @@ export async function scanSoundPreference(): Promise<ScanSoundPreference> {
 export async function saveScanSound(file: File): Promise<ScanSoundPreference> {
   if (!file.type.startsWith("audio/")) throw new Error("请选择音频文件");
   if (file.size > MAX_AUDIO_BYTES) throw new Error("音频文件不能超过 8 MB");
+  const bytes = await file.arrayBuffer();
+  let decoded: AudioBuffer;
+  try {
+    decoded = await context().decodeAudioData(bytes.slice(0));
+  } catch {
+    throw new Error("当前浏览器无法播放这个音频文件，请更换 MP3、WAV 或 M4A 文件");
+  }
   const value: StoredSound = {
     key: SOUND_KEY,
     fileName: file.name,
     mimeType: file.type,
     byteLength: file.size,
     updatedAt: Date.now(),
-    bytes: await file.arrayBuffer(),
+    bytes,
   };
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
-      const request = database.transaction(STORE_NAME, "readwrite")
-        .objectStore(STORE_NAME)
-        .put(value);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error || new Error("无法保存自定义音效"));
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      transaction.objectStore(STORE_NAME).put(value);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("无法保存自定义音效"));
+      transaction.onabort = () => reject(transaction.error || new Error("无法保存自定义音效"));
     });
   } finally {
     database.close();
   }
-  customBuffer = null;
+  customBuffer = { updatedAt: value.updatedAt, value: decoded };
   localStorage.setItem(MODE_KEY, "custom");
   return { mode: "custom", fileName: value.fileName, byteLength: value.byteLength };
 }
@@ -109,11 +116,11 @@ export async function removeScanSound(): Promise<ScanSoundPreference> {
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
-      const request = database.transaction(STORE_NAME, "readwrite")
-        .objectStore(STORE_NAME)
-        .delete(SOUND_KEY);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error || new Error("无法删除自定义音效"));
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      transaction.objectStore(STORE_NAME).delete(SOUND_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("无法删除自定义音效"));
+      transaction.onabort = () => reject(transaction.error || new Error("无法删除自定义音效"));
     });
   } finally {
     database.close();
@@ -145,14 +152,19 @@ async function playDefaultSound(audio: AudioContext): Promise<void> {
 }
 
 async function playCustomSound(audio: AudioContext): Promise<boolean> {
+  if (customBuffer) {
+    const source = audio.createBufferSource();
+    source.buffer = customBuffer.value;
+    source.connect(audio.destination);
+    source.start();
+    return true;
+  }
   const stored = await storedSound();
   if (!stored) return false;
-  if (!customBuffer || customBuffer.updatedAt !== stored.updatedAt) {
-    customBuffer = {
-      updatedAt: stored.updatedAt,
-      value: await audio.decodeAudioData(stored.bytes.slice(0)),
-    };
-  }
+  customBuffer = {
+    updatedAt: stored.updatedAt,
+    value: await audio.decodeAudioData(stored.bytes.slice(0)),
+  };
   const source = audio.createBufferSource();
   source.buffer = customBuffer.value;
   source.connect(audio.destination);
