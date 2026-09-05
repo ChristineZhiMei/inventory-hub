@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import { Camera, CameraOff, Keyboard, ScanLine } from "lucide-react";
 import { errorMessage } from "@/lib/api";
+import { playScanSuccessSound, unlockScanSound } from "@/lib/scanSound";
 import { normalizeCode } from "@/lib/utils";
 import { Alert, Button, Input } from "./AntUi";
 
@@ -20,9 +21,11 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
     if (lastRef.current.code === normalized && now - lastRef.current.at < 1500) return;
     lastRef.current = { code: normalized, at: now };
     setCameraError(""); setCode("");
+    void playScanSuccessSound();
     void Promise.resolve(onCode(normalized)).catch((error) => setCameraError(errorMessage(error)));
   }
   async function startCamera() {
+    void unlockScanSound();
     if (!window.isSecureContext) {
       const secureDevelopmentUrl = location.port === "14237"
         ? `https://${location.hostname}:14239${location.pathname}`

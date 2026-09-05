@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QRCode } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,11 +13,14 @@ import {
   LockKeyhole,
   LogOut,
   Network,
+  Music2,
+  Play,
   Printer,
   RefreshCw,
   Server,
   ShieldCheck,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, errorMessage } from "@/lib/api";
@@ -27,6 +30,15 @@ import {
   type NativePrintSettings,
 } from "@/lib/localPrinting";
 import { queries } from "@/lib/queries";
+import {
+  playScanSuccessSound,
+  removeScanSound,
+  saveScanSound,
+  scanSoundPreference,
+  setScanSoundMode,
+  unlockScanSound,
+  type ScanSoundPreference,
+} from "@/lib/scanSound";
 import type { PrintPairing } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 import { QueryError } from "@/components/Page";
@@ -636,25 +648,159 @@ function DeviceSettings() {
     queryKey: ["capabilities"],
     queryFn: queries.capabilities,
   });
-  if (capabilities.isLoading)
-    return (
+  let content;
+  if (capabilities.isLoading) {
+    content = (
       <Card>
         <CardContent className="p-5 text-sm text-muted-foreground">
           正在读取打印能力…
         </CardContent>
       </Card>
     );
-  if (capabilities.isError)
-    return (
+  } else if (capabilities.isError) {
+    content = (
       <QueryError
         error={capabilities.error}
         onRetry={() => capabilities.refetch()}
       />
     );
-  return capabilities.data?.deploymentMode === "server" ? (
-    <ServerDeviceSettings />
-  ) : (
-    <LocalDeviceSettings />
+  } else {
+    content = capabilities.data?.deploymentMode === "server"
+      ? <ServerDeviceSettings />
+      : <LocalDeviceSettings />;
+  }
+  return (
+    <div className="space-y-6">
+      <ScanSoundSettings />
+      {content}
+    </div>
+  );
+}
+
+function ScanSoundSettings() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preference, setPreference] = useState<ScanSoundPreference>({
+    mode: "default",
+    fileName: null,
+    byteLength: null,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    scanSoundPreference()
+      .then(setPreference)
+      .catch((reason) => setError(errorMessage(reason)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function chooseFile(file: File | undefined) {
+    if (!file) return;
+    setLoading(true);
+    setError("");
+    try {
+      const next = await saveScanSound(file);
+      setPreference(next);
+      await unlockScanSound();
+      await playScanSuccessSound();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setLoading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  function changeMode(mode: string) {
+    const nextMode = mode as ScanSoundPreference["mode"];
+    setScanSoundMode(nextMode);
+    setPreference((current) => ({ ...current, mode: nextMode }));
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Music2 className="size-5" />
+          扫码成功音效
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
+          设置保存在当前电脑或手机浏览器中，不会影响其他访问设备。
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="播放方式">
+            <Select
+              value={preference.mode}
+              disabled={loading}
+              onChange={(event) => changeMode(event.target.value)}
+            >
+              <option value="default">系统提示音</option>
+              <option value="custom" disabled={!preference.fileName}>自定义音频</option>
+              <option value="off">关闭提示音</option>
+            </Select>
+          </Field>
+          <Field label="自定义音频" hint="支持浏览器可播放的音频格式，最大 8 MB">
+            <div className="flex min-w-0 gap-2">
+              <Input
+                value={preference.fileName || "尚未选择"}
+                readOnly
+                aria-label="已选择的扫码音效"
+                className="min-w-0 flex-1"
+              />
+              <input
+                ref={inputRef}
+                type="file"
+                accept="audio/*"
+                className="sr-only"
+                aria-label="选择扫码成功音频文件"
+                onChange={(event) => void chooseFile(event.target.files?.[0])}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                loading={loading}
+                onClick={() => inputRef.current?.click()}
+              >
+                <Upload className="size-4" />
+                选择
+              </Button>
+            </div>
+          </Field>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={preference.mode === "off" || loading}
+            onClick={() => void unlockScanSound().then(playScanSuccessSound)}
+          >
+            <Play className="size-4" />
+            试听
+          </Button>
+          {preference.fileName && (
+            <Button
+              type="button"
+              variant="ghost"
+              loading={loading}
+              onClick={() => {
+                setLoading(true);
+                setError("");
+                void removeScanSound()
+                  .then(setPreference)
+                  .catch((reason) => setError(errorMessage(reason)))
+                  .finally(() => setLoading(false));
+              }}
+            >
+              <Trash2 className="size-4" />
+              删除自定义音频
+            </Button>
+          )}
+        </div>
+        {error && <Alert title="音效设置失败" tone="error" className="mt-4">{error}</Alert>}
+      </CardContent>
+    </Card>
   );
 }
 
