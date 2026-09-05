@@ -40,8 +40,7 @@ export function NodeEditorPage({
             name: values.name,
             notes: values.notes || undefined,
             categoryIds: values.categoryIds,
-            specificationIds:
-              type === "ITEM" ? values.specificationIds : undefined,
+            specificationIds: values.specificationIds,
             tagIds: values.tagIds,
             uploadIds: values.images
               .map((image) => image.uploadId)
@@ -63,8 +62,7 @@ export function NodeEditorPage({
           name: values.name,
           notes: values.notes || "",
           categoryIds: values.categoryIds,
-          specificationIds:
-            type === "ITEM" ? values.specificationIds : undefined,
+          specificationIds: values.specificationIds,
           tagIds: values.tagIds,
           images: values.images.map((image) =>
             image.imageId
