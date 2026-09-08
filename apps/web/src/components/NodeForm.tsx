@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radio, Select as AntSelect, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
+import { useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { useMediaQuery } from "@/lib/media";
@@ -32,6 +33,7 @@ export function NodeForm({
   type,
   initial,
   prefill,
+  defaultTargetId: inheritedTargetId,
   submitLabel = "保存档案",
   onSubmit,
   busy,
@@ -48,6 +50,7 @@ export function NodeForm({
     | "specification"
     | "tags"
   >;
+  defaultTargetId?: string;
   submitLabel?: string;
   onSubmit: (
     payload: NodeFormData & { images: EditableImage[] },
@@ -70,6 +73,7 @@ export function NodeForm({
   const [creatingTaxonomy, setCreatingTaxonomy] = useState<"tag" | "specification" | null>(null);
   const [taxonomyPopupOpen, setTaxonomyPopupOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
+  const [searchParams] = useSearchParams();
   useBodyScrollLock(mobile && taxonomyPopupOpen);
   const categories = useQuery({
     queryKey: ["categories"],
@@ -93,7 +97,9 @@ export function NodeForm({
     enabled: !initial && type !== "WAREHOUSE",
   });
   const defaultTargetId =
-    new URLSearchParams(location.search).get("targetId") || "";
+    searchParams.get("targetId") ||
+    inheritedTargetId ||
+    "";
   const form = useForm<NodeFormData>({
     resolver: zodResolver(schema),
     defaultValues: {

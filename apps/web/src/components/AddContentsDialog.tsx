@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table } from "antd";
-import { CheckCircle2, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { errorMessage } from "@/lib/api";
 import { pageItems, queries } from "@/lib/queries";
 import type { InventoryNode } from "@/lib/types";
@@ -30,7 +30,7 @@ export function AddContentsDialog({
   const [tagId, setTagId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "card">("list");
+  const [viewMode, setViewMode] = useState<"list" | "card">("card");
   const [cursor, setCursor] = useState("");
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -73,12 +73,6 @@ export function AddContentsDialog({
     : target.type === "BOX"
       ? ["BAG", "ITEM"] as const
       : ["BOX", "BAG", "ITEM"] as const;
-  const candidateHint = target.type === "BAG"
-    ? "可选择其他位置中的在库物品，移动后直接放入该袋子。"
-    : target.type === "BOX"
-      ? "可选择其他位置中的在库袋子或物品，袋子内的内容会保持不变。"
-      : "可选择其他位置中的在库箱子、袋子或物品，容器内的内容会保持不变。";
-
   useEffect(() => {
     if (!open) return;
     setQueryText("");
@@ -119,7 +113,6 @@ export function AddContentsDialog({
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{candidateHint}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="relative sm:col-span-2">
               <Search className="absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -264,12 +257,6 @@ export function AddContentsDialog({
                       selected={isSelected}
                       onSelect={() => toggleSelected(item, !isSelected, setSelected)}
                     />
-                    {isSelected && (
-                      <CheckCircle2
-                        aria-hidden="true"
-                        className="pointer-events-none absolute left-2 top-2 z-10 size-6 fill-primary text-primary-foreground"
-                      />
-                    )}
                   </div>
                 );
               })}

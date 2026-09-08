@@ -24,6 +24,7 @@ import { pageItems, queries } from "@/lib/queries";
 import type {
   InventoryAction,
   InventoryNode,
+  NodeType,
   PrintExecutor,
 } from "@/lib/types";
 import { formatDate, formatOperationSummary } from "@/lib/utils";
@@ -179,11 +180,41 @@ export function NodeDetailPage() {
     );
   const node = detail.data;
   const contentItems = pageItems(contents.data);
-  const addContentsLabel = node.type === "BAG"
-    ? "添加物品"
-    : node.type === "BOX"
-      ? "添加袋子或物品"
-      : "添加箱子、袋子或物品";
+  const creatableChildTypes: NodeType[] =
+    node.type === "WAREHOUSE"
+      ? ["ITEM", "BAG", "BOX"]
+      : node.type === "BOX"
+        ? ["ITEM", "BAG"]
+        : node.type === "BAG"
+          ? ["ITEM"]
+          : [];
+  const createChild = (childType: NodeType) =>
+    navigate(
+      `/archives/new?type=${childType}&targetId=${encodeURIComponent(node.id)}`,
+    );
+  const createChildButton = creatableChildTypes.length === 1 ? (
+    <Button variant="outline" onClick={() => createChild(creatableChildTypes[0])}>
+      <PackagePlus className="size-4" />
+      创建
+    </Button>
+  ) : creatableChildTypes.length > 1 ? (
+    <Dropdown
+      trigger={["click"]}
+      placement="bottomRight"
+      menu={{
+        items: creatableChildTypes.map((childType) => ({
+          key: childType,
+          label: `创建${typeName[childType]}`,
+        })),
+        onClick: ({ key }) => createChild(key as NodeType),
+      }}
+    >
+      <Button variant="outline" aria-haspopup="menu">
+        <PackagePlus className="size-4" />
+        创建
+      </Button>
+    </Dropdown>
+  ) : null;
   const canCreateMatchingLocation =
     node.type === "ITEM" &&
     node.stockStatus === "IN_STOCK" &&
@@ -230,9 +261,9 @@ export function NodeDetailPage() {
                 placement="bottomRight"
                 menu={{
                   items: [
-                    { key: "BAG", label: "添加袋子" },
-                    { key: "BOX", label: "添加箱子" },
-                    { key: "WAREHOUSE", label: "添加仓库" },
+                    { key: "BAG", label: "创建袋子" },
+                    { key: "BOX", label: "创建箱子" },
+                    { key: "WAREHOUSE", label: "创建仓库" },
                   ],
                   onClick: ({ key }) =>
                     navigate(
@@ -242,15 +273,18 @@ export function NodeDetailPage() {
               >
                 <Button variant="outline" aria-haspopup="menu">
                   <PackagePlus className="size-4" />
-                  添加收纳位置
+                  创建收纳
                 </Button>
               </Dropdown>
             )}
             {node.type !== "ITEM" && (
-              <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
-                <PackagePlus className="size-4" />
-                {addContentsLabel}
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
+                  <PackagePlus className="size-4" />
+                  添加
+                </Button>
+                {createChildButton}
+              </>
             )}
             <Link
               to={`/archives/${node.id}/edit`}
@@ -514,18 +548,13 @@ export function NodeDetailPage() {
                           : Warehouse
                     }
                     title="这里还是空的"
-                    description="可以从已有档案中选择，也可以进入连续录入工作台新建或扫码。"
+                    description="可添加已有档案或创建新档案"
                     action={
                       <div className="flex flex-wrap justify-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setAddContentsOpen(true)}>
-                          {addContentsLabel}
+                          添加
                         </Button>
-                        <Link
-                          to={`/intake?targetId=${node.id}`}
-                          className="inline-flex min-h-8 items-center text-sm font-medium text-primary hover:underline"
-                        >
-                          开始连续录入
-                        </Link>
+                        {createChildButton}
                       </div>
                     }
                   />
@@ -806,3 +835,10 @@ function remotePrinterId(executor?: PrintExecutor) {
     ""
   );
 }
+
+const typeName: Record<NodeType, string> = {
+  ITEM: "物品",
+  BAG: "袋子",
+  BOX: "箱子",
+  WAREHOUSE: "仓库",
+};
