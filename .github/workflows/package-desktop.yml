@@ -5,9 +5,15 @@ on:
     branches:
       - "feat/**"
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Create or update the GitHub Release for the desktop version"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: package-desktop-${{ github.workflow }}-${{ github.ref }}
@@ -65,3 +71,31 @@ jobs:
             apps/desktop/release/*.blockmap
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish Windows release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $package = Get-Content "apps/desktop/package.json" | ConvertFrom-Json
+          $tag = "v$($package.version)"
+          $assets = Get-ChildItem "apps/desktop/release" -File |
+            Where-Object { $_.Extension -in ".exe", ".zip", ".blockmap" }
+
+          if (-not $assets) {
+            throw "No Windows release assets were generated."
+          }
+
+          gh release view $tag --repo "${{ github.repository }}" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $assets.FullName `
+              --repo "${{ github.repository }}" `
+              --clobber
+          } else {
+            gh release create $tag $assets.FullName `
+              --repo "${{ github.repository }}" `
+              --target "${{ github.sha }}" `
+              --title "Inventory Hub $tag" `
+              --generate-notes
+          }
