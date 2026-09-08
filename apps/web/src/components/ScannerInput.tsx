@@ -5,10 +5,14 @@ import { Camera, CameraOff, Flashlight, Keyboard, ScanLine } from "lucide-react"
 import { errorMessage } from "@/lib/api";
 import { playScanSuccessSound, unlockScanSound } from "@/lib/scanSound";
 import { normalizeCode } from "@/lib/utils";
+import {
+  decodeCode128WithZXingCpp,
+  warmupZXingCppScanner,
+} from "@/lib/zxingCppScanner";
 import { Alert, Button, Input } from "./AntUi";
 
-const ENHANCED_SCAN_INTERVAL_MS = 220;
-const ENHANCED_SCAN_MAX_WIDTH = 1024;
+const ENHANCED_SCAN_INTERVAL_MS = 180;
+const ENHANCED_SCAN_MAX_WIDTH = 1400;
 
 export function ScannerInput({ onCode, paused = false, label = "扫描或输入编号" }: { onCode: (code: string) => void | Promise<void>; paused?: boolean; label?: string }) {
   const [code, setCode] = useState("");
@@ -44,8 +48,11 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
         : "当前 HTTPS 证书尚未被浏览器信任。iPhone/iPad 请在“设置 → 通用 → 关于本机 → 证书信任设置”中开启 Inventory Hub Local CA 的完全信任，然后彻底关闭并重新打开浏览器。");
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) { setCameraError("此浏览器不支持实时摄像头扫码，请改用手动输入。 "); return; }
+    if (!navigator.mediaDevices?.getUserMedia) { setCameraError("此浏览器不支持实时摄像头扫码，请改用手动输入。"); return; }
     setCameraError(""); setCameraOn(true);
+    void warmupZXingCppScanner().catch(() => {
+      // The JavaScript decoder remains available if the optional WASM engine cannot load.
+    });
   }
   function stopCamera() {
     controlsRef.current?.stop();
@@ -67,24 +74,32 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
       delayBetweenScanAttempts: 90,
       delayBetweenScanSuccess: 650,
     });
-    const enhancedReader = new BrowserMultiFormatReader(hints);
     const enhancedCanvas = document.createElement("canvas");
     let enhancedTimer: number | undefined;
     let enhancedFrame = 0;
-    const scanEnhancedFrame = () => {
+    let enhancedScanBusy = false;
+    const scanEnhancedFrame = async () => {
       if (disposed || !videoRef.current) return;
+      if (enhancedScanBusy) return;
+      enhancedScanBusy = true;
       try {
-        const ready = prepareEnhancedBarcodeFrame(
+        const mode = enhancedFrame++ % 4;
+        const frame = prepareEnhancedBarcodeFrame(
           videoRef.current,
           enhancedCanvas,
-          enhancedFrame++ % 2 === 1,
+          mode,
         );
-        if (ready) deliver(enhancedReader.decodeFromCanvas(enhancedCanvas).getText());
+        if (frame) {
+          const decoded = await decodeCode128WithZXingCpp(frame, mode === 2);
+          if (decoded && !disposed) deliver(decoded);
+        }
       } catch {
-        // The regular full-frame reader keeps running while enhanced attempts miss.
-      }
-      if (!disposed) {
-        enhancedTimer = window.setTimeout(scanEnhancedFrame, ENHANCED_SCAN_INTERVAL_MS);
+        // The regular full-frame JavaScript reader keeps running while enhanced attempts miss.
+      } finally {
+        enhancedScanBusy = false;
+        if (!disposed) {
+          enhancedTimer = window.setTimeout(scanEnhancedFrame, ENHANCED_SCAN_INTERVAL_MS);
+        }
       }
     };
     reader.decodeFromConstraints({
@@ -144,7 +159,7 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
           // Some mobile browsers report a mode but reject manual constraints.
         }
       }
-      enhancedTimer = window.setTimeout(scanEnhancedFrame, ENHANCED_SCAN_INTERVAL_MS);
+      enhancedTimer = window.setTimeout(() => void scanEnhancedFrame(), ENHANCED_SCAN_INTERVAL_MS);
     }).catch((error: unknown) => {
       setCameraError(error instanceof DOMException && error.name === "NotAllowedError" ? "摄像头权限被拒绝，请在浏览器设置中允许或使用手动输入。" : "摄像头无法启动，可能正被其他应用占用。");
       setCameraOn(false);
@@ -170,14 +185,14 @@ export function ScannerInput({ onCode, paused = false, label = "扫描或输入�
 function prepareEnhancedBarcodeFrame(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
-  thresholded: boolean,
-): boolean {
+  mode: number,
+): ImageData | null {
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
-    return false;
+    return null;
   }
 
-  const sourceWidth = Math.round(video.videoWidth * 0.94);
-  const sourceHeight = Math.round(video.videoHeight * 0.58);
+  const sourceWidth = Math.round(video.videoWidth * 0.96);
+  const sourceHeight = Math.round(video.videoHeight * 0.52);
   const sourceX = Math.round((video.videoWidth - sourceWidth) / 2);
   const sourceY = Math.round((video.videoHeight - sourceHeight) / 2);
   const outputWidth = Math.min(sourceWidth, ENHANCED_SCAN_MAX_WIDTH);
@@ -186,7 +201,7 @@ function prepareEnhancedBarcodeFrame(
   canvas.height = outputHeight;
 
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return false;
+  if (!context) return null;
   context.drawImage(
     video,
     sourceX,
@@ -200,9 +215,12 @@ function prepareEnhancedBarcodeFrame(
   );
 
   const frame = context.getImageData(0, 0, outputWidth, outputHeight);
+  if (mode === 0) return frame;
+
+  const channel = mode === 3 ? highestContrastChannel(frame.data) : -1;
   const histogram = new Uint32Array(256);
   for (let index = 0; index < frame.data.length; index += 16) {
-    histogram[luminance(frame.data, index)] += 1;
+    histogram[pixelValue(frame.data, index, channel)] += 1;
   }
   const low = histogramPercentile(histogram, 0.03);
   const high = histogramPercentile(histogram, 0.97);
@@ -210,17 +228,40 @@ function prepareEnhancedBarcodeFrame(
   const threshold = otsuThreshold(histogram);
 
   for (let index = 0; index < frame.data.length; index += 4) {
-    const gray = luminance(frame.data, index);
+    const gray = pixelValue(frame.data, index, channel);
     const normalized = Math.max(0, Math.min(255, ((gray - low) * 255) / contrastRange));
-    const output = thresholded
+    const output = mode === 2
       ? gray <= threshold ? 0 : 255
-      : Math.max(0, Math.min(255, (normalized - 128) * 1.35 + 128));
+      : Math.max(0, Math.min(255, (normalized - 128) * 1.45 + 128));
     frame.data[index] = output;
     frame.data[index + 1] = output;
     frame.data[index + 2] = output;
   }
-  context.putImageData(frame, 0, 0);
-  return true;
+  return frame;
+}
+
+function pixelValue(data: Uint8ClampedArray, index: number, channel: number): number {
+  return channel >= 0 ? data[index + channel] : luminance(data, index);
+}
+
+function highestContrastChannel(data: Uint8ClampedArray): number {
+  const histograms = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  for (let index = 0; index < data.length; index += 16) {
+    histograms[0][data[index]] += 1;
+    histograms[1][data[index + 1]] += 1;
+    histograms[2][data[index + 2]] += 1;
+  }
+  let bestChannel = 0;
+  let bestRange = -1;
+  for (let channel = 0; channel < histograms.length; channel += 1) {
+    const range = histogramPercentile(histograms[channel], 0.97)
+      - histogramPercentile(histograms[channel], 0.03);
+    if (range > bestRange) {
+      bestRange = range;
+      bestChannel = channel;
+    }
+  }
+  return bestChannel;
 }
 
 function luminance(data: Uint8ClampedArray, index: number): number {
