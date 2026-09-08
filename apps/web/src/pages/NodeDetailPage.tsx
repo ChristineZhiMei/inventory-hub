@@ -108,17 +108,15 @@ export function NodeDetailPage() {
   });
   const printMutation = useMutation({
     mutationFn: async (remote?: { executorId: string; printerId: string }) => {
-      const native =
-        !remote && capabilities.data?.deploymentMode === "desktop";
+      const native = capabilities.data?.deploymentMode === "desktop";
+      const printerId = remote?.printerId || nativePrintSettings.data?.printerId;
+      if (!printerId) throw new Error("没有可用打印机");
       const job = await api<{ id: string }>("/print-jobs", {
         method: "POST",
         idempotent: true,
         body: {
-          executorId:
-            remote?.executorId || (native ? "local-native" : "local-simulator"),
-          printerId:
-            remote?.printerId ||
-            (native ? "local-default" : "HPRT-D35-SIMULATOR"),
+          executorId: remote?.executorId || "local-native",
+          printerId,
           nodeIds: [id],
           templateId: `default-${nativePrintSettings.data?.paper || "40x30"}`,
           copies: 1,
@@ -288,7 +286,7 @@ export function NodeDetailPage() {
             )}
             <Link
               to={`/archives/${node.id}/edit`}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
             >
               <Edit3 className="size-4" />
               编辑
@@ -301,7 +299,14 @@ export function NodeDetailPage() {
                   : submitPrint(undefined)
               }
               loading={printMutation.isPending}
-              disabled={capabilities.isLoading || capabilities.isError || printCoolingDown}
+              disabled={
+                capabilities.isLoading ||
+                capabilities.isError ||
+                printCoolingDown ||
+                (capabilities.data?.deploymentMode === "desktop" &&
+                  (!nativePrintSettings.data?.available ||
+                    !nativePrintSettings.data?.printerId))
+              }
             >
               <Printer className="size-4" />
               {printCoolingDown && !printMutation.isPending ? "请稍候" : "打印标签"}
@@ -317,12 +322,7 @@ export function NodeDetailPage() {
       {lastPrintJobId && (
         <Alert title="打印任务已创建" tone="success" className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {capabilities.data?.deploymentMode === "desktop" &&
-              !window.inventoryHub?.printLabel
-                ? "任务已发送到电脑端打印队列，页面可以继续操作。"
-                : "当前页面会保持不变，可以继续操作。"}
-            </span>
+            <span>已加入打印队列</span>
             <Link
               to={`/print-jobs/${lastPrintJobId}`}
               className="font-medium text-primary hover:underline"

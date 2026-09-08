@@ -473,9 +473,6 @@ function LanSettings() {
   const port = Number(lanUrl?.port || service.port || location.port || (protocol === "https" ? 443 : 80));
   const certificateInstallUrl = desktop?.certificateInstallUrl;
   const httpsReady = lanEnabled && protocol === "https" && Boolean(lanOrigin);
-  const secureDevelopmentOrigin = location.port === "14237" && host
-    ? `https://${host}:14239`
-    : null;
   const currentPageTrusted = window.isSecureContext;
   const copyInstallUrl = async () => {
     if (!certificateInstallUrl) return;
@@ -533,26 +530,6 @@ function LanSettings() {
             >
               先在桌面端生成局域网证书，再在手机上安装公开证书并核对指纹。普通
               http://192.168.x.x 无法获得相机权限。
-            </Alert>
-          )}
-          {secureDevelopmentOrigin && (
-            <Alert
-              title="手机开发测试请使用 HTTPS 入口"
-              tone="info"
-              className="mt-4"
-            >
-              <p>
-                当前 14237 是电脑端 HTTP 开发地址，安装证书后也不会变成安全页面。
-              </p>
-              <a
-                href={secureDevelopmentOrigin}
-                className="mt-3 inline-flex min-h-11 items-center gap-2 font-medium text-primary hover:underline"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {secureDevelopmentOrigin}
-                <ExternalLink className="size-4" />
-              </a>
             </Alert>
           )}
         </CardContent>
@@ -1112,9 +1089,6 @@ function LocalDeviceSettings() {
   });
   return (
     <div className="space-y-6">
-      <Alert title="打印由 Electron 执行" tone="info">
-        此处显示的是运行后端的电脑可访问的打印机。手机和普通浏览器只负责选择设备、创建任务，不会读取当前浏览器所在设备。
-      </Alert>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1130,7 +1104,7 @@ function LocalDeviceSettings() {
                 onChange={(e) => setPrinterId(e.target.value)}
                 disabled={!settings.data?.available || settings.isLoading}
               >
-                <option value="">选择 Electron 电脑上的打印机</option>
+                <option value="">选择打印机</option>
                 {settings.data?.printers.map((printer) => (
                   <option value={printer.printerId} key={printer.printerId}>
                     {printer.displayName || printer.printerId}
@@ -1144,8 +1118,8 @@ function LocalDeviceSettings() {
                 value={selectedPaper}
                 onChange={(e) => setPaper(e.target.value as "40x30" | "50x30")}
               >
-                <option value="40x30">40 × 30 mm（待实机确认）</option>
-                <option value="50x30">50 × 30 mm（待实机确认）</option>
+                <option value="40x30">40 × 30 mm</option>
+                <option value="50x30">50 × 30 mm</option>
               </Select>
             </Field>
             <Field label="扫码枪结束符">
@@ -1164,12 +1138,10 @@ function LocalDeviceSettings() {
             loading={save.isPending}
             disabled={!settings.data?.available || !selectedPrinterId}
           >
-            保存 Electron 打印配置
+            保存打印配置
           </Button>
           {save.isSuccess && (
-            <Alert title="打印配置已保存" tone="success" className="mt-4">
-              后续从桌面端、手机或其他 Web 页面创建的本机打印任务都会使用这台设备。
-            </Alert>
+            <Alert title="打印配置已保存" tone="success" className="mt-4" />
           )}
           {(settings.error || save.error) && (
             <Alert title="无法读取或保存打印配置" tone="error" className="mt-4">

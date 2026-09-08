@@ -149,7 +149,7 @@ export function ItemsPage() {
   const createAction = (
         <Link
           to="/archives/new?type=ITEM"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
         >
           <PackagePlus className="size-4" />
           新建物品

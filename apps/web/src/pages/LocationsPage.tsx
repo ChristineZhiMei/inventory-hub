@@ -234,21 +234,21 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
             <>
               <Link
                 to="/archives/new?type=WAREHOUSE"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
               >
                 <Plus className="size-4" />
                 仓库
               </Link>
               <Link
                 to="/archives/new?type=BOX"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
               >
                 <Plus className="size-4" />
                 箱子
               </Link>
               <Link
                 to="/archives/new?type=BAG"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
               >
                 <Plus className="size-4" />
                 袋子

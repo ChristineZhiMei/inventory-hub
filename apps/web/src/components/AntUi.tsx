@@ -85,7 +85,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={antType}
         htmlType={type}
         danger={variant === "destructive"}
-        size={size === "sm" ? "small" : "large"}
+        size={size === "sm" ? "small" : "middle"}
         loading={loading}
         className={cn(
           "app-button",

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
@@ -5,6 +6,8 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
+  LayoutGrid,
+  List,
   Package,
   PackagePlus,
   Search,
@@ -18,6 +21,7 @@ import {
   operationActionLabels,
 } from "@/lib/utils";
 import { NodeCard } from "@/components/NodeCard";
+import { NodeListTable } from "@/components/NodeListTable";
 import { QueryError } from "@/components/Page";
 import {
   Badge,
@@ -25,10 +29,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Segmented,
   Skeleton,
 } from "@/components/AntUi";
 
 export function DashboardPage() {
+  const [stagingView, setStagingView] = useState<"card" | "list">("card");
   const query = useQuery({
     queryKey: ["dashboard"],
     queryFn: queries.dashboard,
@@ -66,15 +72,15 @@ export function DashboardPage() {
     <div>
       <div className="mb-3 flex flex-wrap justify-end gap-2">
         <Link
-          to="/items/new"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          to="/archives/new?type=ITEM"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
         >
           <PackagePlus className="size-4" />
           新建物品
         </Link>
         <Link
           to="/scan"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
         >
           <Search className="size-4" />
           扫码查找
@@ -117,40 +123,52 @@ export function DashboardPage() {
       )}
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
         <section>
-          <div className="mb-3 flex items-end justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold">待整理</h2>
-              <p className="text-sm text-muted-foreground">
-                系统暂存区中的最近档案
-              </p>
             </div>
-            <Link
-              to="/staging"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              查看全部
-            </Link>
+            <div className="flex items-center gap-2">
+              <Segmented
+                value={stagingView}
+                onChange={setStagingView}
+                options={[
+                  {
+                    value: "card",
+                    label: <span className="inline-flex items-center gap-1"><LayoutGrid className="size-3.5" />卡片</span>,
+                  },
+                  {
+                    value: "list",
+                    label: <span className="inline-flex items-center gap-1"><List className="size-3.5" />列表</span>,
+                  },
+                ]}
+              />
+              <Link
+                to="/staging"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                查看全部
+              </Link>
+            </div>
           </div>
           {query.isLoading ? (
             <div className="grid gap-3 md:grid-cols-2">
               <Skeleton className="h-28" />
               <Skeleton className="h-28" />
             </div>
-          ) : data?.stagingItems?.length ? (
+          ) : data?.stagingItems?.length && stagingView === "card" ? (
             <div className="grid gap-3 md:grid-cols-2">
               {data.stagingItems.slice(0, 6).map((node) => (
                 <NodeCard key={node.id} node={node} />
               ))}
             </div>
+          ) : data?.stagingItems?.length ? (
+            <NodeListTable nodes={data.stagingItems.slice(0, 6)} />
           ) : (
             <Card>
               <CardContent className="grid min-h-48 place-items-center text-center">
                 <div>
                   <PackagePlus className="mx-auto size-8 text-muted-foreground/60" />
                   <p className="mt-3 font-medium">暂存区已经整理完毕</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    仅建档但未归位的对象会显示在这里。
-                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -200,7 +218,7 @@ export function DashboardPage() {
             )}
             <Link
               to="/operations"
-              className="mt-3 flex min-h-11 items-center justify-center rounded-md text-sm font-medium text-primary hover:bg-muted"
+              className="mt-3 flex min-h-8 items-center justify-center rounded-md text-sm font-medium text-primary hover:bg-muted"
             >
               查看完整记录
             </Link>

@@ -11,7 +11,6 @@ import {
   PlusSquareOutlined,
   PrinterOutlined,
   ScanOutlined,
-  SearchOutlined,
   SettingOutlined,
   SunOutlined,
   TagsOutlined,
@@ -25,7 +24,7 @@ import { useAuth } from "@/lib/auth";
 import { consumeLocalNativeQueue } from "@/lib/localPrinting";
 import { useBodyScrollLock } from "@/lib/scrollLock";
 import { useTheme } from "@/lib/theme";
-import { Badge, Button, Input } from "./AntUi";
+import { Badge, Button } from "./AntUi";
 
 const primary = [
   { to: "/", label: "概览", icon: <AppstoreOutlined /> },
@@ -64,7 +63,6 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const [drawer, setDrawer] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
-  const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
   useBodyScrollLock(drawer);
   const selectedRoute = useMemo(
@@ -129,12 +127,6 @@ export function AppShell() {
     retry: false,
   });
 
-  const submitSearch = (event: React.FormEvent) => {
-    event.preventDefault();
-    const query = search.trim();
-    if (query) navigate(`/search?q=${encodeURIComponent(query)}`);
-  };
-
   const menuItems = allNavigation.map((item) => ({
     key: item.to,
     icon: item.icon,
@@ -183,18 +175,7 @@ export function AppShell() {
           >
             <MenuOutlined />
           </Button>
-          <form onSubmit={submitSearch} className="global-search">
-            <Input
-              id="global-search"
-              name="global-search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              prefix={<SearchOutlined />}
-              placeholder="搜索名称、编号或标签"
-              aria-label="全局搜索"
-              autoComplete="off"
-            />
-          </form>
+          <div className="app-header__spacer" />
           <Badge variant={online ? "success" : "warning"} className="online-state">
             {online ? "服务在线" : "离线"}
           </Badge>

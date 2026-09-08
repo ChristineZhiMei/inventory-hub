@@ -241,9 +241,7 @@ body {
   }
 }
 
-.global-search {
-  width: min(100%, 576px);
-  min-width: 0;
+.app-header__spacer {
   flex: 1;
 }
 
@@ -355,6 +353,10 @@ body {
   max-width: 100%;
   white-space: nowrap;
 
+  @media (max-width: 767px) {
+    min-height: 40px;
+  }
+
   > span {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -362,9 +364,15 @@ body {
 }
 
 .app-button--icon {
-  width: 44px !important;
-  min-width: 44px !important;
+  width: 32px !important;
+  min-width: 32px !important;
   padding-inline: 0 !important;
+
+  @media (max-width: 767px) {
+    width: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px;
+  }
 }
 
 .app-button--secondary {
