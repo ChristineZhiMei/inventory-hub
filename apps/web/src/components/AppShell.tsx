@@ -29,8 +29,8 @@ import { Badge, Button, Input } from "./AntUi";
 
 const primary = [
   { to: "/", label: "概览", icon: <AppstoreOutlined /> },
-  { to: "/items", label: "物品", icon: <InboxOutlined /> },
-  { to: "/locations", label: "位置", icon: <FolderOpenOutlined /> },
+  { to: "/archives", label: "档案", icon: <FolderOpenOutlined /> },
+  { to: "/staging", label: "待整理", icon: <InboxOutlined /> },
   { to: "/intake", label: "连续录入", mobileLabel: "录入", icon: <PlusSquareOutlined /> },
   { to: "/scan", label: "扫码", icon: <ScanOutlined /> },
 ];

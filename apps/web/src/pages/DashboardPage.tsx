@@ -105,7 +105,7 @@ export function DashboardPage() {
       </div>
       {(data?.counts.staging ?? 0) > 0 && (
         <Link
-          to="/locations?staging=true"
+          to="/staging"
           className="mt-4 flex min-h-14 items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/35 dark:text-amber-100"
         >
           <CircleAlert className="size-5" />
@@ -125,7 +125,7 @@ export function DashboardPage() {
               </p>
             </div>
             <Link
-              to="/locations?staging=true"
+              to="/staging"
               className="text-sm font-medium text-primary hover:underline"
             >
               查看全部

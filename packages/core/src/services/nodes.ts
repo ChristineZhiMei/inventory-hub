@@ -210,25 +210,61 @@ export class NodeService {
   listLocations(query: Record<string, unknown>): any {
     const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 100);
     const offset = decodeCursor(query.cursor);
-    const where = ["type<>'ITEM'"];
+    const where = ["n.type<>'ITEM'"];
     const params: unknown[] = [];
-    if (query.type) { where.push("type=?"); params.push(String(query.type)); }
-    if (query.parentId) { where.push("parent_id=?"); params.push(String(query.parentId)); }
+    if (query.type) { where.push("n.type=?"); params.push(String(query.type)); }
+    if (query.parentId) { where.push("n.parent_id=?"); params.push(String(query.parentId)); }
+    if (query.status) { where.push("n.stock_status=?"); params.push(String(query.status)); }
     if (query.q) {
       const pattern = `%${String(query.q).trim()}%`;
-      where.push(`(code LIKE ? OR name LIKE ? OR EXISTS(
-        SELECT 1 FROM node_tags qnt JOIN tags qt ON qt.id=qnt.tag_id WHERE qnt.node_id=nodes.id AND qt.name LIKE ?
-      ))`);
-      params.push(pattern, pattern, pattern);
+      where.push(`(n.code LIKE ? OR n.name LIKE ?
+        OR EXISTS(SELECT 1 FROM node_tags qnt JOIN tags qt ON qt.id=qnt.tag_id WHERE qnt.node_id=n.id AND qt.name LIKE ?)
+        OR EXISTS(SELECT 1 FROM node_specifications qns JOIN specifications qs ON qs.id=qns.specification_id WHERE qns.node_id=n.id AND qs.name LIKE ?)
+        OR EXISTS(SELECT 1 FROM node_categories qnc JOIN categories qc ON qc.id=qnc.category_id WHERE qnc.node_id=n.id AND qc.name LIKE ?))`);
+      params.push(pattern, pattern, pattern, pattern, pattern);
     }
-    const rows = this.database.db.prepare(`${nodeSelect} WHERE ${where.join(" AND ")} ORDER BY is_system_staging DESC,created_at DESC,id DESC LIMIT ? OFFSET ?`)
+    if (query.categoryId) {
+      where.push(`EXISTS(SELECT 1 FROM node_categories fnc WHERE fnc.node_id=n.id AND fnc.category_id IN
+        (WITH RECURSIVE cats(id) AS (SELECT id FROM categories WHERE id=? UNION ALL SELECT c.id FROM categories c JOIN cats ON c.parent_id=cats.id) SELECT id FROM cats))`);
+      params.push(String(query.categoryId));
+    }
+    const tagIds = queryList(query.tagIds);
+    if (tagIds.length) {
+      where.push(`(SELECT count(DISTINCT nt.tag_id) FROM node_tags nt WHERE nt.node_id=n.id AND nt.tag_id IN (${tagIds.map(() => "?").join(",")}))=?`);
+      params.push(...tagIds, tagIds.length);
+    }
+    const specificationIds = queryList(query.specificationIds);
+    if (specificationIds.length) {
+      where.push(`(SELECT count(DISTINCT ns.specification_id) FROM node_specifications ns WHERE ns.node_id=n.id AND ns.specification_id IN (${specificationIds.map(() => "?").join(",")}))=?`);
+      params.push(...specificationIds, specificationIds.length);
+    }
+    if (query.locationId) {
+      if (String(query.includeDescendants) === "false") {
+        where.push("n.parent_id=?");
+        params.push(String(query.locationId));
+      } else {
+        where.push(`n.id IN (WITH RECURSIVE tree(id) AS (SELECT id FROM nodes WHERE id=? UNION ALL SELECT c.id FROM nodes c JOIN tree ON c.parent_id=tree.id) SELECT id FROM tree)`);
+        params.push(String(query.locationId));
+      }
+    }
+    const rows = this.database.db.prepare(`${nodeSelect} n WHERE ${where.join(" AND ")} ORDER BY n.is_system_staging DESC,n.created_at DESC,n.id DESC LIMIT ? OFFSET ?`)
       .all(...params, limit + 1, offset) as any[];
     return {
-      items: rows.slice(0, limit).map((node) => ({
-        ...serializeNode(this.database.db, node),
-        counts: this.countContents(node.id),
-        images: this.media.listForNode(node.id),
-      })),
+      items: rows.slice(0, limit).map((node) => {
+        const specifications = this.specificationsForNode(node.id);
+        const categories = this.categoriesForNode(node.id);
+        return {
+          ...serializeNode(this.database.db, node),
+          counts: this.countContents(node.id),
+          categoryId: categories[0]?.id ?? null,
+          category: categories[0] ?? null,
+          categories,
+          specification: specifications.map((item) => item.name).join(" / ") || null,
+          specifications,
+          tags: this.tagsForNode(node.id),
+          images: this.media.listForNode(node.id),
+        };
+      }),
       nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null,
     };
   }
@@ -323,11 +359,21 @@ export class NodeService {
         ...serializeNode(this.database.db, root),
         images: this.media.listForNode(root.id),
       },
-      items: page.map((node: any) => ({
-        ...serializeNode(this.database.db, node),
-        depth: getPath(this.database.db, node.id).length - getPath(this.database.db, root.id).length,
-        images: this.media.listForNode(node.id),
-      })),
+      items: page.map((node: any) => {
+        const categories = this.categoriesForNode(node.id);
+        const specifications = this.specificationsForNode(node.id);
+        return {
+          ...serializeNode(this.database.db, node),
+          depth: getPath(this.database.db, node.id).length - getPath(this.database.db, root.id).length,
+          categoryId: categories[0]?.id ?? null,
+          category: categories[0] ?? null,
+          categories,
+          specification: specifications.map((item) => item.name).join(" / ") || null,
+          specifications,
+          tags: this.tagsForNode(node.id),
+          images: this.media.listForNode(node.id),
+        };
+      }),
       counts: this.countContents(nodeId),
       categorySummary: this.categorySummary(nodeId),
       treeToken: token,

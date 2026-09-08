@@ -1,53 +1,90 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dropdown } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { CheckSquare, FolderTree, LayoutGrid, List, Plus, Square, Warehouse } from "lucide-react";
+import { CheckSquare, FolderTree, LayoutGrid, List, ListFilter, Plus, Search, Square, Warehouse } from "lucide-react";
+import { Popup } from "antd-mobile";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMediaQuery } from "@/lib/media";
+import { useBodyScrollLock } from "@/lib/scrollLock";
 import { pageItems, queries } from "@/lib/queries";
 import type { InventoryAction, InventoryNode, NodeType } from "@/lib/types";
 import { InventoryActionDialog } from "@/components/InventoryActionDialog";
 import { NodeCard } from "@/components/NodeCard";
 import { NodeListTable } from "@/components/NodeListTable";
 import { QueryError } from "@/components/Page";
-import { Alert, Button, EmptyState, Segmented, Skeleton } from "@/components/AntUi";
+import { Alert, Button, EmptyState, Input, Segmented, Select, Skeleton } from "@/components/AntUi";
 
-type LocationFilter = "ALL" | Exclude<NodeType, "ITEM">;
-export function LocationsPage() {
+type LocationFilter = "ALL" | NodeType;
+export function LocationsPage({ forcedType, staging = false }: { forcedType?: Exclude<NodeType, "ITEM">; staging?: boolean }) {
   const mobile = useMediaQuery("(max-width: 767px)");
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const [filter, setFilter] = useState<LocationFilter>("ALL");
+  const [params, setParams] = useSearchParams();
+  const [filter, setFilter] = useState<LocationFilter>(forcedType || "ALL");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [action, setAction] = useState<InventoryAction | null>(null);
-  const stagingMode = params.get("staging") === "true";
+  const stagingMode = staging || params.get("staging") === "true";
+  useBodyScrollLock(mobile && filterOpen);
+  const request = useMemo(() => {
+    const next = new URLSearchParams(params);
+    next.set("limit", "30");
+    next.delete("view");
+    next.delete("staging");
+    next.delete("type");
+    if (forcedType || filter !== "ALL") next.set("type", forcedType || filter);
+    if (next.get("locationId")) next.set("includeDescendants", "true");
+    return next.toString();
+  }, [filter, forcedType, params]);
   const query = useQuery({
-    queryKey: ["locations", "root"],
-    queryFn: () => queries.locations("limit=100"),
+    queryKey: ["locations", "archive", request],
+    queryFn: () => queries.locations(request),
   });
-  const stagingRoot = pageItems(query.data).find(
+  const stagingRootQuery = useQuery({
+    queryKey: ["locations", "staging-root"],
+    queryFn: () => queries.locations("limit=100"),
+    enabled: stagingMode,
+  });
+  const stagingRoot = pageItems(stagingRootQuery.data).find(
     (node) => node.isSystemStaging,
   );
   const stagingContents = useQuery({
     queryKey: ["contents", stagingRoot?.id, "recursive"],
-    queryFn: () => queries.contents(stagingRoot!.id, true),
+    queryFn: () => queries.contents(stagingRoot!.id, false),
     enabled: stagingMode && !!stagingRoot,
   });
   const source = stagingMode
     ? pageItems(stagingContents.data)
     : pageItems(query.data);
-  const locations = source.filter(
-    (node) => filter === "ALL" || node.type === filter,
-  );
+  const locations = source.filter((node) => {
+    const activeType = forcedType || filter;
+    if (activeType !== "ALL" && node.type !== activeType) return false;
+    const queryText = (params.get("q") || "").trim().toLocaleLowerCase("zh-CN");
+    if (stagingMode) {
+      const searchText = [
+        node.name,
+        node.code,
+        ...(node.categories || []).map((entry) => entry.name),
+        ...(node.specifications || []).map((entry) => entry.name),
+        ...(node.tags || []).map((entry) => entry.name),
+      ].join(" ").toLocaleLowerCase("zh-CN");
+      if (queryText && !searchText.includes(queryText)) return false;
+      if (params.get("status") && node.stockStatus !== params.get("status")) return false;
+      if (params.get("categoryId") && !node.categories?.some((entry) => entry.id === params.get("categoryId"))) return false;
+      if (params.get("tagIds") && !node.tags?.some((entry) => entry.id === params.get("tagIds"))) return false;
+      if (params.get("specificationIds") && !node.specifications?.some((entry) => entry.id === params.get("specificationIds"))) return false;
+    }
+    return true;
+  });
   const loading =
-    query.isLoading ||
+    (stagingMode ? stagingRootQuery.isLoading : query.isLoading) ||
     (stagingMode && !!stagingRoot && stagingContents.isLoading);
-  const error = query.error || stagingContents.error;
+  const error = stagingMode
+    ? stagingRootQuery.error || stagingContents.error
+    : query.error;
   const canBatchMove = (node: InventoryNode) =>
-    (node.type === "BOX" || node.type === "BAG") &&
-    node.stockStatus === "IN_STOCK";
+    node.type !== "WAREHOUSE" && node.stockStatus === "IN_STOCK";
   const movableLocations = locations.filter(canBatchMove);
   const selectableLocations = rootNodes(movableLocations);
   const canSelectLocation = (node: InventoryNode) =>
@@ -61,6 +98,63 @@ export function LocationsPage() {
     setFilter(next);
     setSelected([]);
   }
+  function setFilterParam(name: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(name, value);
+    else next.delete(name);
+    next.delete("cursor");
+    setParams(next, { replace: true });
+    setSelected([]);
+  }
+  const categories = useQuery({ queryKey: ["categories"], queryFn: queries.categories });
+  const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
+  const specifications = useQuery({
+    queryKey: ["specifications", "location-filter"],
+    queryFn: () => queries.specifications("limit=100"),
+  });
+  const parentLocations = useQuery({
+    queryKey: ["locations", "location-filter"],
+    queryFn: () => queries.locations("limit=100"),
+  });
+  const advancedFilterKeys = ["status", "categoryId", "tagIds", "specificationIds", "locationId"];
+  const advancedFilterCount = advancedFilterKeys.filter((key) => params.get(key)).length;
+  useEffect(() => {
+    setSelected([]);
+    setSelecting(false);
+  }, [forcedType, stagingMode]);
+  function resetAdvancedFilters() {
+    const next = new URLSearchParams(params);
+    advancedFilterKeys.forEach((key) => next.delete(key));
+    next.delete("cursor");
+    setParams(next, { replace: true });
+    setSelected([]);
+  }
+  const advancedFilters = (
+    <>
+      <Select value={params.get("status") || ""} onChange={(event) => setFilterParam("status", event.target.value)} aria-label="状态">
+        <option value="">全部状态</option>
+        <option value="IN_STOCK">在库</option>
+        <option value="OUT">已出库</option>
+        <option value="DISCARDED">已废弃</option>
+      </Select>
+      <Select value={params.get("categoryId") || ""} onChange={(event) => setFilterParam("categoryId", event.target.value)} aria-label="分类">
+        <option value="">全部分类</option>
+        {pageItems(categories.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+      </Select>
+      <Select value={params.get("tagIds") || ""} onChange={(event) => setFilterParam("tagIds", event.target.value)} aria-label="标签">
+        <option value="">全部标签</option>
+        {pageItems(tags.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+      </Select>
+      <Select value={params.get("specificationIds") || ""} onChange={(event) => setFilterParam("specificationIds", event.target.value)} aria-label="规格">
+        <option value="">全部规格</option>
+        {pageItems(specifications.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+      </Select>
+      <Select value={params.get("locationId") || ""} onChange={(event) => setFilterParam("locationId", event.target.value)} aria-label="所在位置">
+        <option value="">全部位置</option>
+        {pageItems(parentLocations.data).filter((entry) => !entry.isSystemStaging).map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.code}</option>)}
+      </Select>
+    </>
+  );
   function toggleSelectionMode() {
     setSelecting((current) => {
       if (current) setSelected([]);
@@ -79,44 +173,38 @@ export function LocationsPage() {
         : [...current, node],
     );
   }
+  const typeOptions: Array<{ value: LocationFilter; label: string }> = [
+    { value: "ALL", label: "全部" },
+    ...(stagingMode
+      ? [{ value: "ITEM" as const, label: "物品" }]
+      : [{ value: "WAREHOUSE" as const, label: "仓库" }]),
+    { value: "BOX", label: "箱子" },
+    { value: "BAG", label: "袋子" },
+  ];
   return (
     <div>
       <div className="page-toolbar location-toolbar">
-        {!stagingMode && (
+        <div className="page-toolbar__search relative">
+          <Search className="absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={params.get("q") || ""} onChange={(event) => setFilterParam("q", event.target.value)} placeholder="搜索名称、编号、分类、规格或标签" className="pl-9" aria-label="搜索档案" />
+        </div>
+        {!forcedType && (
           <div className="page-toolbar__filters">
             <Segmented
               value={filter}
               onChange={changeFilter}
-              options={[
-                { value: "ALL", label: "全部" },
-                { value: "WAREHOUSE", label: "仓库" },
-                { value: "BOX", label: "箱子" },
-                { value: "BAG", label: "袋子" },
-              ]}
-            />
-            <Segmented
-              value={viewMode}
-              onChange={setViewMode}
-              options={[
-                { value: "card", label: <span className="inline-flex items-center gap-1"><LayoutGrid className="size-3.5" />卡片</span> },
-                { value: "list", label: <span className="inline-flex items-center gap-1"><List className="size-3.5" />列表</span> },
-              ]}
-            />
-          </div>
-        )}
-        {stagingMode && (
-          <div className="page-toolbar__filters">
-            <Segmented
-              value={viewMode}
-              onChange={setViewMode}
-              options={[
-                { value: "card", label: "卡片" },
-                { value: "list", label: "列表" },
-              ]}
+              options={typeOptions}
             />
           </div>
         )}
         <div className="page-toolbar__actions">
+          <Button variant="outline" onClick={() => setFilterOpen(true)}>
+            <ListFilter className="size-4" />筛选{advancedFilterCount ? `（${advancedFilterCount}）` : ""}
+          </Button>
+          <Segmented value={viewMode} onChange={setViewMode} options={[
+            { value: "card", label: <span className="inline-flex items-center gap-1"><LayoutGrid className="size-3.5" />卡片</span> },
+            { value: "list", label: <span className="inline-flex items-center gap-1"><List className="size-3.5" />列表</span> },
+          ]} />
           <Button
             variant={selecting ? "secondary" : "outline"}
             onClick={toggleSelectionMode}
@@ -125,7 +213,7 @@ export function LocationsPage() {
             {selecting ? <CheckSquare className="size-4" /> : <Square className="size-4" />}
             {selecting ? "退出批量" : "批量移动"}
           </Button>
-          {mobile ? (
+          {!stagingMode && (mobile ? (
             <Dropdown
               trigger={["click"]}
               placement="bottomRight"
@@ -135,7 +223,7 @@ export function LocationsPage() {
                   { key: "BOX", label: "添加箱子" },
                   { key: "BAG", label: "添加袋子" },
                 ],
-                onClick: ({ key }) => navigate(`/locations/new?type=${key}`),
+                onClick: ({ key }) => navigate(`/archives/new?type=${key}`),
               }}
             >
               <Button aria-label="添加位置" aria-haspopup="menu">
@@ -145,30 +233,35 @@ export function LocationsPage() {
           ) : (
             <>
               <Link
-                to="/locations/new?type=WAREHOUSE"
+                to="/archives/new?type=WAREHOUSE"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
               >
                 <Plus className="size-4" />
                 仓库
               </Link>
               <Link
-                to="/locations/new?type=BOX"
+                to="/archives/new?type=BOX"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
               >
                 <Plus className="size-4" />
                 箱子
               </Link>
               <Link
-                to="/locations/new?type=BAG"
+                to="/archives/new?type=BAG"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 <Plus className="size-4" />
                 袋子
               </Link>
             </>
-          )}
+          ))}
         </div>
       </div>
+      <Popup visible={filterOpen} position="bottom" onMaskClick={() => setFilterOpen(false)} onClose={() => setFilterOpen(false)} bodyClassName="app-mobile-dialog" bodyStyle={{ maxHeight: "82dvh" }}>
+        <div className="app-mobile-dialog__header"><strong>筛选档案</strong></div>
+        <div className="app-mobile-dialog__body grid gap-3">{advancedFilters}</div>
+        <div className="app-mobile-dialog__footer"><Button variant="outline" onClick={resetAdvancedFilters}>重置</Button><Button onClick={() => setFilterOpen(false)}>完成</Button></div>
+      </Popup>
       {selecting && (
         <div className="sticky top-20 z-10 mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 p-3 shadow-raised backdrop-blur">
           <span className="mr-auto text-sm font-medium">
@@ -192,9 +285,10 @@ export function LocationsPage() {
         <QueryError
           error={error}
           onRetry={() =>
-            Promise.all([query.refetch(), stagingContents.refetch()]).then(
-              () => undefined,
-            )
+            (stagingMode
+              ? Promise.all([stagingRootQuery.refetch(), stagingContents.refetch()])
+              : query.refetch()
+            ).then(() => undefined)
           }
         />
       ) : stagingMode && !stagingRoot ? (
@@ -224,10 +318,10 @@ export function LocationsPage() {
         />
       ) : (
         <EmptyState
-          icon={params.get("staging") ? FolderTree : Warehouse}
-          title={params.get("staging") ? "暂存区为空" : "没有匹配的位置"}
+          icon={stagingMode ? FolderTree : Warehouse}
+          title={stagingMode ? "暂存区为空" : "没有匹配的位置"}
           description={
-            params.get("staging")
+            stagingMode
               ? "新档案仅保存时会进入暂存区。"
               : "新建仓库后，再创建箱子或袋子并安排位置。"
           }

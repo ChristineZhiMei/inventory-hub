@@ -1,4 +1,4 @@
-import { Archive, Box, ChevronRight, MapPin, Package, Warehouse } from "lucide-react";
+import { Archive, Box, Check, ChevronRight, MapPin, Package, Square, Warehouse } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { InventoryNode, NodeType, StockStatus } from "@/lib/types";
 import { imageUrl } from "@/lib/api";
@@ -35,7 +35,7 @@ export function NodeCard({
   selected?: boolean;
   onSelect?: (node: InventoryNode) => void;
 }) {
-  const destination = node.type === "ITEM" ? `/items/${node.id}` : `/locations/${node.id}`;
+  const destination = `/archives/${node.id}`;
   const image = node.images?.[0];
   const location = nodeLocationLabel(node);
   const content = <>
@@ -44,7 +44,21 @@ export function NodeCard({
       <div className="flex min-w-0 flex-1 flex-col p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{node.name}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{node.code}</p></div><div className="flex shrink-0 flex-col items-end gap-1.5"><Badge variant="outline"><TypeName type={node.type} /></Badge><StatusBadge status={node.stockStatus} /></div></div><div className="mt-auto flex min-w-0 items-center gap-2 pt-2"><p className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs text-muted-foreground" title={location}><MapPin className="size-3.5 shrink-0" /><span className="truncate">{location}</span></p><ChevronRight className="node-card__chevron size-5 shrink-0 text-muted-foreground" /></div></div>
     </div>
   </>;
-  const cardClassName = cn("node-card w-full overflow-hidden text-left", selected && "ring-2 ring-primary");
+  const cardClassName = cn(
+    "node-card relative w-full overflow-hidden text-left",
+    selected && "bg-primary/5 ring-2 ring-primary",
+  );
+  const selectionMark = selectable ? (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "absolute left-2 top-2 z-10 grid size-6 place-items-center rounded-md border bg-card shadow-sm",
+        selected && "border-primary bg-primary text-primary-foreground",
+      )}
+    >
+      {selected ? <Check className="size-4" /> : <Square className="size-4" />}
+    </span>
+  ) : null;
   if (selectable) return <Card
     role="button"
     tabIndex={selectionDisabled ? -1 : 0}
@@ -62,6 +76,6 @@ export function NodeCard({
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
       selectionDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
     )}
-  >{content}</Card>;
+  >{selectionMark}{content}</Card>;
   return <Link to={destination} className="block w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Card className={cardClassName}>{content}</Card></Link>;
 }

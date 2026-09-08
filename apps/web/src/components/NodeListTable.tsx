@@ -77,7 +77,7 @@ export function NodeListTable({
             fixed: "right",
             render: (_, node) => (
               <Link
-                to={node.type === "ITEM" ? `/items/${node.id}` : `/locations/${node.id}`}
+                to={`/archives/${node.id}`}
                 className="font-medium text-primary hover:underline"
               >
                 查看

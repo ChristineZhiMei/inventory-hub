@@ -158,7 +158,7 @@ export function NodeDetailPage() {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
-      navigate(detail.data?.type === "ITEM" ? "/items" : "/locations", {
+      navigate(`/archives?type=${detail.data?.type || "ITEM"}`, {
         replace: true,
       });
     },
@@ -236,7 +236,7 @@ export function NodeDetailPage() {
                   ],
                   onClick: ({ key }) =>
                     navigate(
-                      `/locations/new?type=${key}&sourceItemId=${encodeURIComponent(node.id)}`,
+                      `/archives/new?type=${key}&sourceItemId=${encodeURIComponent(node.id)}`,
                     ),
                 }}
               >
@@ -253,7 +253,7 @@ export function NodeDetailPage() {
               </Button>
             )}
             <Link
-              to={`${node.type === "ITEM" ? `/items/${node.id}` : `/locations/${node.id}`}/edit`}
+              to={`/archives/${node.id}/edit`}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted"
             >
               <Edit3 className="size-4" />
@@ -332,9 +332,7 @@ export function NodeDetailPage() {
                         >
                           <Link
                             to={
-                              entry.type === "ITEM"
-                                ? `/items/${entry.id}`
-                                : `/locations/${entry.id}`
+                              `/archives/${entry.id}`
                             }
                             className="hover:text-foreground hover:underline"
                           >
@@ -496,7 +494,7 @@ export function NodeDetailPage() {
                           fixed: "right",
                           render: (_, child) => (
                             <Link
-                              to={child.type === "ITEM" ? `/items/${child.id}` : `/locations/${child.id}`}
+                              to={`/archives/${child.id}`}
                               className="font-medium text-primary hover:underline"
                             >
                               查看详情

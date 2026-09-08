@@ -148,7 +148,7 @@ export function ItemsPage() {
   );
   const createAction = (
         <Link
-          to="/items/new"
+          to="/archives/new?type=ITEM"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <PackagePlus className="size-4" />
@@ -312,7 +312,7 @@ export function ItemsPage() {
           }
           action={
             <Link
-              to="/items/new"
+              to="/archives/new?type=ITEM"
               className="text-sm font-medium text-primary hover:underline"
             >
               新建第一件物品

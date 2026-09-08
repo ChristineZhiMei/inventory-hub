@@ -98,13 +98,13 @@ export function NodeEditorPage({
         values.nextCreateType !== "NONE"
       ) {
         navigate(
-          `/locations/new?type=${values.nextCreateType}&sourceItemId=${encodeURIComponent(resultId)}`,
+          `/archives/new?type=${values.nextCreateType}&sourceItemId=${encodeURIComponent(resultId)}`,
           { replace: true },
         );
         return;
       }
       navigate(
-        type === "ITEM" ? `/items/${resultId}` : `/locations/${resultId}`,
+        `/archives/${resultId}`,
         { replace: true },
       );
     },

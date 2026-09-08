@@ -297,6 +297,14 @@ body {
   }
 }
 
+.archive-tabs {
+  margin-bottom: var(--space-4);
+
+  .ant-tabs-nav {
+    margin-bottom: 0;
+  }
+}
+
 .mobile-tabbar {
   position: fixed;
   inset: auto 0 0;
