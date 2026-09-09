@@ -62,6 +62,7 @@ jobs:
         run: pnpm --filter @inventory-hub/desktop run package:win:x64
 
       - name: Upload desktop artifacts
+        if: ${{ !inputs.publish_release }}
         uses: actions/upload-artifact@v4
         with:
           name: inventory-hub-windows-x64
