@@ -181,6 +181,16 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
     { value: "BOX", label: "箱子" },
     { value: "BAG", label: "袋子" },
   ];
+  const createTypes: Array<Exclude<NodeType, "ITEM">> = forcedType
+    ? [forcedType]
+    : ["WAREHOUSE", "BOX", "BAG"];
+  const createLabel: Record<Exclude<NodeType, "ITEM">, string> = {
+    WAREHOUSE: "仓库",
+    BOX: "箱子",
+    BAG: "袋子",
+  };
+  const createLocation = (type: Exclude<NodeType, "ITEM">) =>
+    navigate(`/archives/new?type=${type}`);
   return (
     <div>
       <div className="page-toolbar location-toolbar">
@@ -213,47 +223,36 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
             {selecting ? <CheckSquare className="size-4" /> : <Square className="size-4" />}
             {selecting ? "退出批量" : "批量移动"}
           </Button>
-          {!stagingMode && (mobile ? (
+          {!stagingMode && (mobile && createTypes.length > 1 ? (
             <Dropdown
               trigger={["click"]}
               placement="bottomRight"
               menu={{
-                items: [
-                  { key: "WAREHOUSE", label: "添加仓库" },
-                  { key: "BOX", label: "添加箱子" },
-                  { key: "BAG", label: "添加袋子" },
-                ],
-                onClick: ({ key }) => navigate(`/archives/new?type=${key}`),
+                items: createTypes.map((type) => ({
+                  key: type,
+                  label: `新建${createLabel[type]}`,
+                })),
+                onClick: ({ key }) =>
+                  createLocation(key as Exclude<NodeType, "ITEM">),
               }}
             >
               <Button aria-label="添加位置" aria-haspopup="menu">
-                <Plus className="size-4" />添加
+                <Plus className="size-4" />新建
               </Button>
             </Dropdown>
           ) : (
-            <>
+            createTypes.map((type, index) => (
               <Link
-                to="/archives/new?type=WAREHOUSE"
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
+                key={type}
+                to={`/archives/new?type=${type}`}
+                className={index === createTypes.length - 1
+                  ? "inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
+                  : "inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"}
               >
                 <Plus className="size-4" />
-                仓库
+                新建{createLabel[type]}
               </Link>
-              <Link
-                to="/archives/new?type=BOX"
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
-              >
-                <Plus className="size-4" />
-                箱子
-              </Link>
-              <Link
-                to="/archives/new?type=BAG"
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
-              >
-                <Plus className="size-4" />
-                袋子
-              </Link>
-            </>
+            ))
           ))}
         </div>
       </div>
