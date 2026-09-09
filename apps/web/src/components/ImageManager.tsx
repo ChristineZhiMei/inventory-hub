@@ -312,11 +312,10 @@ export function ImageManager({
       <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
         <Camera className="mt-0.5 size-4 shrink-0" />
         <span>
-          {required ? "物品至少需要一张图片。" : "图片可选。"}
-          已完成 {completedItems.length} 张
+          {required && completedItems.length === 0 ? "至少添加 1 张 · " : ""}
+          已上传 {completedItems.length}/5
           {activeItems.length > 0 ? `，处理中 ${activeItems.length} 张` : ""}
           {failedItems.length > 0 ? `，失败 ${failedItems.length} 张` : ""}
-          ，最多 5 张；支持 JPEG、PNG、WebP、HEIC、HEIF。
         </span>
       </div>
     </div>

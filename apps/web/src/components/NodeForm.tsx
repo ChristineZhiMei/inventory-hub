@@ -339,6 +339,7 @@ export function NodeForm({
                   {...field}
                   id="name"
                   value={field.value}
+                  autoComplete="off"
                   aria-invalid={!!form.formState.errors.name}
                   autoFocus
                   placeholder={
@@ -349,12 +350,13 @@ export function NodeForm({
             />
           </Field>
           <Field
-            label="分类"
+            label="分类（最多 3 个）"
             error={form.formState.errors.categoryIds?.message}
-            hint="最多选择三个分类"
             required={type === "ITEM"}
           >
             <AntSelect
+              id="categoryIds"
+              aria-label="分类"
               mode="multiple"
               value={form.watch("categoryIds")}
               options={categoryOptions.map((category) => ({
@@ -378,12 +380,13 @@ export function NodeForm({
               allowClear
             />
           </Field>
-          <Field
+            <Field
               label="规格"
               error={form.formState.errors.specificationIds?.message}
-              hint="可选择历史规格；输入新规格后按回车即可创建并添加"
             >
               <AntSelect
+                id="specificationIds"
+                aria-label="规格"
                 mode="tags"
                 value={selectedSpecifications}
                 options={specificationOptions.map((item) => ({ value: item.id, label: item.name }))}
@@ -418,10 +421,11 @@ export function NodeForm({
           <Field
             label="标签"
             error={form.formState.errors.tagIds?.message}
-            hint="输入新标签后按回车即可创建并添加"
             className="md:col-span-2"
           >
             <AntSelect
+              id="tagIds"
+              aria-label="标签"
               mode="tags"
               value={selectedTags}
               options={tagOptions.map((item) => ({ value: item.id, label: item.name }))}
@@ -460,12 +464,7 @@ export function NodeForm({
         </div>
       </section>
       <section className="surface p-5">
-        <div className="mb-5">
-          <h2 className="font-semibold">图片</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            第一张作为封面，可调整顺序；最多 5 张。
-          </p>
-        </div>
+        <h2 className="mb-5 font-semibold">图片（最多 5 张）</h2>
         <ImageManager
           value={images}
           onChange={setImages}
@@ -476,9 +475,6 @@ export function NodeForm({
       {!initial && type !== "WAREHOUSE" && (
         <section className="surface p-5">
           <h2 className="font-semibold">保存位置</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            “仅建档”会放入系统暂存区；只有确认已经实际收纳时才选择位置。
-          </p>
           <Radio.Group
             value={createMode}
             onChange={(event) =>
@@ -547,7 +543,6 @@ export function NodeForm({
         <section className="surface p-5">
           <Field
             label="创建完成后"
-            hint="可继续创建同信息的收纳位置，并自动把刚创建的物品移入其中"
           >
             <Select
               value={form.watch("nextCreateType")}

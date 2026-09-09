@@ -65,9 +65,17 @@ const pages = [
 
 export function SettingsPage() {
   const location = useLocation();
+  const activeLinkRef = useRef<HTMLAnchorElement>(null);
   const section =
     pages.find((page) => location.pathname.endsWith(`/${page.id}`))?.id ||
     "about";
+  useEffect(() => {
+    activeLinkRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [section]);
   return (
     <div>
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -75,6 +83,7 @@ export function SettingsPage() {
           {pages.map(({ id, label, icon: Icon }) => (
             <Link
               key={id}
+              ref={section === id ? activeLinkRef : undefined}
               to={`/settings/${id}`}
               className={cn(
                 "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium",
@@ -641,10 +650,12 @@ function DeviceSettings() {
         onRetry={() => capabilities.refetch()}
       />
     );
+  } else if (capabilities.data?.deploymentMode === "server") {
+    content = <ServerDeviceSettings />;
+  } else if (window.inventoryHub?.getEnvironment) {
+    content = <LocalDeviceSettings />;
   } else {
-    content = capabilities.data?.deploymentMode === "server"
-      ? <ServerDeviceSettings />
-      : <LocalDeviceSettings />;
+    content = null;
   }
   return (
     <div className="space-y-6">
