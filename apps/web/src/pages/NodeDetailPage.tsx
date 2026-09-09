@@ -178,6 +178,11 @@ export function NodeDetailPage() {
     );
   const node = detail.data;
   const contentItems = pageItems(contents.data);
+  const deploymentMode = capabilities.data?.deploymentMode;
+  const showPrintAction =
+    capabilities.isLoading ||
+    deploymentMode === "server" ||
+    deploymentMode === "desktop";
   const canManageContents =
     node.type !== "ITEM" && node.stockStatus === "IN_STOCK";
   const currentParents = node.path?.slice(1).reverse() || [];
@@ -295,26 +300,28 @@ export function NodeDetailPage() {
               <Edit3 className="size-4" />
               编辑
             </Link>
-            <Button
-              variant="outline"
-              onClick={() =>
-                capabilities.data?.deploymentMode === "server"
-                  ? setPrintOpen(true)
-                  : submitPrint(undefined)
-              }
-              loading={printMutation.isPending}
-              disabled={
-                capabilities.isLoading ||
-                capabilities.isError ||
-                printCoolingDown ||
-                (capabilities.data?.deploymentMode === "desktop" &&
-                  (!nativePrintSettings.data?.available ||
-                    !nativePrintSettings.data?.printerId))
-              }
-            >
-              <Printer className="size-4" />
-              {printCoolingDown && !printMutation.isPending ? "请稍候" : "打印标签"}
-            </Button>
+            {showPrintAction && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  deploymentMode === "server"
+                    ? setPrintOpen(true)
+                    : submitPrint(undefined)
+                }
+                loading={printMutation.isPending}
+                disabled={
+                  capabilities.isLoading ||
+                  capabilities.isError ||
+                  printCoolingDown ||
+                  (deploymentMode === "desktop" &&
+                    (!nativePrintSettings.data?.available ||
+                      !nativePrintSettings.data?.printerId))
+                }
+              >
+                <Printer className="size-4" />
+                {printCoolingDown && !printMutation.isPending ? "请稍候" : "打印标签"}
+              </Button>
+            )}
           </>
         }
       />

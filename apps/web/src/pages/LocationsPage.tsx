@@ -219,9 +219,10 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
             variant={selecting ? "secondary" : "outline"}
             onClick={toggleSelectionMode}
             disabled={!selectableLocations.length}
+            aria-label={selecting ? "退出批量移动" : "批量移动"}
           >
             {selecting ? <CheckSquare className="size-4" /> : <Square className="size-4" />}
-            {selecting ? "退出批量" : "批量移动"}
+            {mobile ? (selecting ? "退出" : "批量") : (selecting ? "退出批量" : "批量移动")}
           </Button>
           {!stagingMode && (mobile && createTypes.length > 1 ? (
             <Dropdown
@@ -245,12 +246,13 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
               <Link
                 key={type}
                 to={`/archives/new?type=${type}`}
-                className={index === createTypes.length - 1
-                  ? "inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 md:min-h-8"
-                  : "inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"}
+                aria-label={`新建${createLabel[type]}`}
+                className={`${index === createTypes.length - 1
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "border bg-card hover:bg-muted"} inline-flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-medium md:min-h-8 ${mobile ? "px-3" : "px-4"}`}
               >
                 <Plus className="size-4" />
-                新建{createLabel[type]}
+                {mobile ? "新建" : `新建${createLabel[type]}`}
               </Link>
             ))
           ))}
