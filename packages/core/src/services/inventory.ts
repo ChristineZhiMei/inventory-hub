@@ -169,7 +169,15 @@ export class InventoryService {
       return;
     }
     if (action === "DISCARD") {
-      this.database.db.prepare("UPDATE nodes SET parent_id=NULL,stock_status='DISCARDED',location_version=location_version+1,updated_at=? WHERE id=?").run(now, node.id);
+      const previousPath = node.stockStatus === "IN_STOCK"
+        ? JSON.stringify(getPath(this.database.db, node.id).map((entry) => ({
+            id: entry.id,
+            code: entry.code,
+            name: entry.name,
+            type: entry.type,
+          })))
+        : node.lastInStockPath;
+      this.database.db.prepare("UPDATE nodes SET parent_id=NULL,stock_status='DISCARDED',location_version=location_version+1,last_in_stock_path=?,updated_at=? WHERE id=?").run(previousPath, now, node.id);
       return;
     }
     if (action === "RESTORE") {

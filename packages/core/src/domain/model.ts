@@ -93,6 +93,16 @@ export const validateParent = (childType: NodeType, parent: NodeRow): void => {
 export const normalizeName = (value: string): string => value.normalize("NFC").trim();
 export const normalizedKey = (value: string): string => normalizeName(value).toLocaleLowerCase("zh-CN");
 
+const parseLastPath = (value: string | null) => {
+  if (!value) return undefined;
+  try {
+    const path = JSON.parse(value);
+    return Array.isArray(path) ? path : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const serializeNode = (db: SqliteDatabase, node: NodeRow) => {
   const path = getPath(db, node.id);
   return {
@@ -115,6 +125,7 @@ export const serializeNode = (db: SqliteDatabase, node: NodeRow) => {
       type: entry.type,
       isSystemStaging: Boolean(entry.isSystemStaging),
     })),
+    lastPath: parseLastPath(node.lastInStockPath),
     createdAt: new Date(node.createdAt).toISOString(),
     updatedAt: new Date(node.updatedAt).toISOString(),
   };

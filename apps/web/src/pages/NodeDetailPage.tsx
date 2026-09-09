@@ -178,6 +178,10 @@ export function NodeDetailPage() {
     );
   const node = detail.data;
   const contentItems = pageItems(contents.data);
+  const canManageContents =
+    node.type !== "ITEM" && node.stockStatus === "IN_STOCK";
+  const currentParents = node.path?.slice(1).reverse() || [];
+  const lastParents = node.lastPath?.slice(1).reverse() || [];
   const creatableChildTypes: NodeType[] =
     node.type === "WAREHOUSE"
       ? ["ITEM", "BAG", "BOX"]
@@ -275,7 +279,7 @@ export function NodeDetailPage() {
                 </Button>
               </Dropdown>
             )}
-            {node.type !== "ITEM" && (
+            {canManageContents && (
               <>
                 <Button variant="outline" onClick={() => setAddContentsOpen(true)}>
                   <PackagePlus className="size-4" />
@@ -354,12 +358,12 @@ export function NodeDetailPage() {
                   <p className="mt-2 font-mono text-sm text-muted-foreground">
                     {node.code}
                   </p>
-                  {node.path?.length ? (
+                  {node.stockStatus === "IN_STOCK" && currentParents.length ? (
                     <nav
                       className="mt-4 flex flex-wrap items-center gap-1 text-sm text-muted-foreground"
                       aria-label="当前位置"
                     >
-                      {node.path.map((entry, index) => (
+                      {currentParents.map((entry, index) => (
                         <span
                           key={entry.id}
                           className="flex items-center gap-1"
@@ -372,18 +376,17 @@ export function NodeDetailPage() {
                           >
                             {entry.name}
                           </Link>
-                          {index < node.path!.length - 1 && (
+                          {index < currentParents.length - 1 && (
                             <ChevronRight className="size-3" />
                           )}
                         </span>
                       ))}
                     </nav>
-                  ) : node.stockStatus === "OUT" ? (
-                    <p className="mt-3 text-sm text-amber-700">
-                      当前离库
-                      {node.lastPath?.length
-                        ? `；最后位置：${node.lastPath.map((entry) => entry.name).join(" / ")}`
-                        : ""}
+                  ) : node.stockStatus !== "IN_STOCK" ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {lastParents.length
+                        ? `最后位置：${lastParents.map((entry) => entry.name).join(" / ")}`
+                        : "无最后位置记录"}
                     </p>
                   ) : null}
                 </div>
@@ -548,15 +551,7 @@ export function NodeDetailPage() {
                           : Warehouse
                     }
                     title="这里还是空的"
-                    description="可添加已有档案或创建新档案"
-                    action={
-                      <div className="flex flex-wrap justify-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setAddContentsOpen(true)}>
-                          添加
-                        </Button>
-                        {createChildButton}
-                      </div>
-                    }
+                    description={canManageContents ? "使用页面顶部操作添加内容" : "暂无直接收纳内容"}
                   />
                 )}
               </CardContent>
@@ -693,7 +688,7 @@ export function NodeDetailPage() {
         nodes={[node]}
         onClose={() => setAction(null)}
       />
-      {node.type !== "ITEM" && (
+      {canManageContents && (
         <AddContentsDialog
           open={addContentsOpen}
           target={node}

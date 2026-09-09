@@ -14,8 +14,12 @@ export function TypeName({ type }: { type: NodeType }) { return typeNames[type];
 export function StatusBadge({ status }: { status?: StockStatus | null }) { if (!status) return null; const info = statusMap[status]; return <Badge variant={info.variant}>{info.label}</Badge>; }
 
 export function nodeLocationLabel(node: InventoryNode): string {
-  if (node.stockStatus === "OUT") return "已出库";
-  if (node.stockStatus === "DISCARDED") return "已废弃";
+  if (node.stockStatus === "OUT" || node.stockStatus === "DISCARDED") {
+    const lastParent = node.lastPath?.[1];
+    return lastParent
+      ? `最后位置：${lastParent.name} · ${lastParent.code}`
+      : "无最后位置记录";
+  }
   const parent = node.path?.[1];
   if (parent?.isSystemStaging) return "暂存区";
   if (parent) return `${parent.name} · ${parent.code}`;
