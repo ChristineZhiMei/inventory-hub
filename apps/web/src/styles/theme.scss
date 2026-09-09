@@ -379,6 +379,20 @@ body {
   background: hsl(var(--secondary));
 }
 
+.node-form-submit {
+  position: sticky;
+  bottom: calc(80px + max(var(--space-4), env(safe-area-inset-bottom)));
+  z-index: 10;
+  display: flex !important;
+  width: fit-content;
+  margin-left: auto;
+  box-shadow: var(--shadow-raised);
+
+  @media (min-width: 1024px) {
+    bottom: var(--space-4);
+  }
+}
+
 .app-input,
 .app-select,
 .app-select .ant-select {

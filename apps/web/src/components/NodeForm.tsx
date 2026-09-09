@@ -567,13 +567,11 @@ export function NodeForm({
           </Field>
         </section>
       )}
-      <div className="safe-bottom sticky bottom-20 z-10 flex justify-end gap-3 border-t bg-background/95 py-4 backdrop-blur lg:bottom-0">
-        <Button type="submit" loading={busy}>
-          {!initial && type === "ITEM" && form.watch("nextCreateType") !== "NONE"
-            ? `创建物品并添加${typeLabel[form.watch("nextCreateType") as Exclude<NodeFormData["nextCreateType"], "NONE">]}`
-            : submitLabel}
-        </Button>
-      </div>
+      <Button type="submit" loading={busy} className="node-form-submit">
+        {!initial && type === "ITEM" && form.watch("nextCreateType") !== "NONE"
+          ? `创建物品并添加${typeLabel[form.watch("nextCreateType") as Exclude<NodeFormData["nextCreateType"], "NONE">]}`
+          : submitLabel}
+      </Button>
     </form>
   );
 }
