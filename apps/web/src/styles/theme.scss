@@ -407,6 +407,17 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.ant-select-multiple {
+  .ant-select-selection-search {
+    min-width: 4rem;
+    flex: 1 0 4rem;
+  }
+
+  .ant-select-selection-search-input {
+    min-width: 4rem;
+  }
+}
+
 .app-label {
   display: block;
   margin-bottom: 6px;

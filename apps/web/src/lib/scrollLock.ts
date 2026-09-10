@@ -57,3 +57,65 @@ export function useBodyScrollLock(locked: boolean): void {
     return acquireDocumentScrollLock();
   }, [locked]);
 }
+
+export function useSelectPopupScrollGuard(active: boolean): void {
+  useEffect(() => {
+    if (!active) return undefined;
+
+    let previousTouchY: number | null = null;
+    const popupScroller = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return null;
+      const popup = target.closest(".ant-select-dropdown");
+      if (!popup) return null;
+      return (
+        target.closest<HTMLElement>(".rc-virtual-list-holder") ??
+        popup.querySelector<HTMLElement>(".rc-virtual-list-holder") ??
+        (popup as HTMLElement)
+      );
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (!popupScroller(event.target)) return;
+      previousTouchY = event.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const scroller = popupScroller(event.target);
+      const currentTouchY = event.touches[0]?.clientY;
+      if (!scroller || currentTouchY == null || previousTouchY == null) return;
+
+      const movingDown = currentTouchY > previousTouchY;
+      const movingUp = currentTouchY < previousTouchY;
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom =
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+      if (
+        scroller.scrollHeight <= scroller.clientHeight ||
+        (movingDown && atTop) ||
+        (movingUp && atBottom)
+      ) {
+        event.preventDefault();
+      }
+      event.stopPropagation();
+      previousTouchY = currentTouchY;
+    };
+    const clearTouch = () => {
+      previousTouchY = null;
+    };
+
+    document.addEventListener("touchstart", onTouchStart, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchmove", onTouchMove, {
+      capture: true,
+      passive: false,
+    });
+    document.addEventListener("touchend", clearTouch, true);
+    document.addEventListener("touchcancel", clearTouch, true);
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchmove", onTouchMove, true);
+      document.removeEventListener("touchend", clearTouch, true);
+      document.removeEventListener("touchcancel", clearTouch, true);
+    };
+  }, [active]);
+}

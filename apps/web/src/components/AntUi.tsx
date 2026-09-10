@@ -33,7 +33,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { useMediaQuery } from "@/lib/media";
-import { useBodyScrollLock } from "@/lib/scrollLock";
+import { useBodyScrollLock, useSelectPopupScrollGuard } from "@/lib/scrollLock";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant =
@@ -160,7 +160,7 @@ export const Select = forwardRef<
     const generatedId = useId();
     const mobile = useMediaQuery("(max-width: 767px)");
     const [popupOpen, setPopupOpen] = useState(false);
-    useBodyScrollLock(mobile && popupOpen);
+    useSelectPopupScrollGuard(mobile && popupOpen);
     const options = Children.toArray(children)
       .filter((child): child is OptionElement => isValidElement(child))
       .map((child) => ({

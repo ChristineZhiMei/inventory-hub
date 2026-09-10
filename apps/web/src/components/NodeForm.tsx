@@ -8,7 +8,7 @@ import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { useMediaQuery } from "@/lib/media";
 import { pageItems, queries } from "@/lib/queries";
-import { useBodyScrollLock } from "@/lib/scrollLock";
+import { useSelectPopupScrollGuard } from "@/lib/scrollLock";
 import type { InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
 import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
 import { ImageManager, type EditableImage } from "./ImageManager";
@@ -74,7 +74,7 @@ export function NodeForm({
   const [taxonomyPopupOpen, setTaxonomyPopupOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
   const [searchParams] = useSearchParams();
-  useBodyScrollLock(mobile && taxonomyPopupOpen);
+  useSelectPopupScrollGuard(mobile && taxonomyPopupOpen);
   const categories = useQuery({
     queryKey: ["categories"],
     queryFn: queries.categories,
@@ -368,7 +368,7 @@ export function NodeForm({
               className="w-full"
               optionFilterProp="label"
               maxCount={3}
-              maxTagCount="responsive"
+              maxTagCount={mobile ? 1 : "responsive"}
               virtual={!mobile}
               onOpenChange={setTaxonomyPopupOpen}
               onChange={(values) =>
@@ -413,7 +413,7 @@ export function NodeForm({
                 notFoundContent={
                   specifications.isFetching ? <Spin size="small" /> : "输入后按回车创建"
                 }
-                maxTagCount="responsive"
+                maxTagCount={mobile ? 1 : "responsive"}
                 tokenSeparators={[",", "，", "/", "／"]}
                 allowClear
               />
@@ -437,7 +437,7 @@ export function NodeForm({
               onOpenChange={setTaxonomyPopupOpen}
               onChange={(values) => void updateCreatableSelection("tag", values)}
               loading={tags.isLoading || creatingTaxonomy === "tag"}
-              maxTagCount="responsive"
+              maxTagCount={mobile ? 1 : "responsive"}
               tokenSeparators={[",", "，"]}
               allowClear
             />
