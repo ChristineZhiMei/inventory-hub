@@ -3,7 +3,12 @@ name: Package desktop
 on:
   push:
     branches:
-      - "feat/**"
+      - master
+    paths:
+      - ".github/workflows/package-desktop.yml"
+      - "apps/desktop/**"
+      - "packages/contracts/**"
+      - "packages/core/**"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -72,7 +77,7 @@ jobs:
         run: pnpm --filter @inventory-hub/desktop run package:win:x64
 
       - name: Upload desktop artifacts
-        if: ${{ !inputs.publish_release }}
+        if: ${{ github.event_name != 'push' && !inputs.publish_release }}
         uses: actions/upload-artifact@v4
         with:
           name: inventory-hub-windows-x64
@@ -86,7 +91,7 @@ jobs:
           retention-days: 14
 
       - name: Publish Windows release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release) }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
