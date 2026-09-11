@@ -1,0 +1,93 @@
+name: Publish Web resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_version:
+        description: "Web version, for example 0.2.1"
+        required: true
+        type: string
+      min_desktop_version:
+        description: "Minimum compatible desktop version"
+        required: true
+        type: string
+        default: "0.2.0"
+      release_notes:
+        description: "User-visible Web release notes"
+        required: false
+        type: string
+        default: "界面功能与体验更新"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-web-${{ inputs.web_version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Web ${{ inputs.web_version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      INVENTORY_HUB_WEB_VERSION: ${{ inputs.web_version }}
+      INVENTORY_HUB_MIN_DESKTOP_VERSION: ${{ inputs.min_desktop_version }}
+      INVENTORY_HUB_WEB_RELEASE_NOTES: ${{ inputs.release_notes }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.9.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and build Web
+        run: pnpm build:contracts && pnpm --filter @inventory-hub/web typecheck && pnpm build:web
+
+      - name: Package Web resources
+        run: pnpm --filter @inventory-hub/web package:release
+
+      - name: Publish Web release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_VERSION: ${{ inputs.web_version }}
+          MIN_DESKTOP_VERSION: ${{ inputs.min_desktop_version }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          tag="web-v${WEB_VERSION}"
+          notes_path="${RUNNER_TEMP}/inventory-hub-web-release-notes.md"
+          printf '%s\n\n%s\n\n- [下载 Windows 客户端](https://github.com/${{ github.repository }}/releases/tag/v%s)\n' \
+            "${RELEASE_NOTES}" \
+            "适用于 Inventory Hub ${MIN_DESKTOP_VERSION} 及以上兼容版本。" \
+            "${MIN_DESKTOP_VERSION}" > "${notes_path}"
+          mapfile -t assets < <(find apps/web/release -maxdepth 1 -type f \( -name '*.ihweb' -o -name '*.json' \) -print)
+          if [ "${#assets[@]}" -ne 2 ]; then
+            echo "Expected one .ihweb package and one .json metadata file." >&2
+            exit 1
+          fi
+          if gh release view "${tag}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --repo "${{ github.repository }}" --clobber
+            gh release edit "${tag}" --repo "${{ github.repository }}" --notes-file "${notes_path}"
+          else
+            gh release create "${tag}" "${assets[@]}" \
+              --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" \
+              --title "Inventory Hub Web ${WEB_VERSION}" \
+              --notes-file "${notes_path}"
+          fi

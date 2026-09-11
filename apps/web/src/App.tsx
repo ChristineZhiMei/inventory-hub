@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/lib/auth";
 import { DiagnosticPage, LoginPage, SetupPage } from "@/pages/AuthPages";
+import { reportWebReleaseReady } from "@/lib/webRelease";
 
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const ArchivesPage = lazy(() => import("@/pages/ArchivesPage").then((module) => ({ default: module.ArchivesPage })));
@@ -34,5 +35,6 @@ function ProtectedApp() {
 function NotFound() { return <div className="surface grid min-h-80 place-items-center p-8 text-center"><div><p className="text-5xl font-semibold text-muted-foreground/40">404</p><h1 className="mt-3 text-xl font-semibold">页面不存在</h1><p className="mt-2 text-sm text-muted-foreground">这个入口可能已经移动，返回概览继续操作。</p><a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">返回概览</a></div></div>; }
 
 export default function App() {
+  useEffect(() => reportWebReleaseReady(), []);
   return <Routes><Route path="*" element={<ProtectedApp />} /></Routes>;
 }

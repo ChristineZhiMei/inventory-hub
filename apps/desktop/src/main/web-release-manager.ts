@@ -99,7 +99,7 @@ export class WebReleaseManager {
     this.root = join(options.userDataPath, "web-releases");
     this.statePath = join(options.userDataPath, "config", "web-releases.json");
     this.bundledPath = options.bundledPath;
-    this.bundledVersion = normalizeVersion(options.bundledVersion);
+    this.bundledVersion = readBundledVersion(options.bundledPath, options.bundledVersion);
     this.desktopVersion = normalizeVersion(options.desktopVersion);
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     this.state = this.readState();
@@ -186,22 +186,27 @@ export class WebReleaseManager {
   }
 
   async downloadAvailable(): Promise<WebReleaseStatus> {
-    if (!this.available) await this.checkForUpdate();
-    if (!this.available) throw new Error("WEB_RELEASE_NOT_AVAILABLE");
-    if (!this.available.compatible) throw new Error("WEB_RELEASE_REQUIRES_DESKTOP_UPDATE");
-    if (this.available.packageSize > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
-    this.setStatus("downloading", `正在下载界面 ${this.available.version}`, 0);
-    const response = await net.fetch(this.available.packageUrl, {
-      headers: { "User-Agent": `Inventory-Hub/${this.desktopVersion}` },
-      bypassCustomProtocolHandlers: true,
-    });
-    if (!response.ok) throw new Error(`WEB_RELEASE_DOWNLOAD_FAILED_${response.status}`);
-    const declaredLength = Number(response.headers.get("content-length") ?? 0);
-    if (declaredLength > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
-    this.setStatus("importing", `正在校验界面 ${this.available.version}`, 100);
-    return this.importBuffer(bytes);
+    try {
+      if (!this.available) await this.checkForUpdate();
+      if (!this.available) throw new Error("WEB_RELEASE_NOT_AVAILABLE");
+      if (!this.available.compatible) throw new Error("WEB_RELEASE_REQUIRES_DESKTOP_UPDATE");
+      if (this.available.packageSize > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
+      this.setStatus("downloading", `正在下载界面 ${this.available.version}`, 0);
+      const response = await net.fetch(this.available.packageUrl, {
+        headers: { "User-Agent": `Inventory-Hub/${this.desktopVersion}` },
+        bypassCustomProtocolHandlers: true,
+      });
+      if (!response.ok) throw new Error(`WEB_RELEASE_DOWNLOAD_FAILED_${response.status}`);
+      const declaredLength = Number(response.headers.get("content-length") ?? 0);
+      if (declaredLength > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.byteLength > MAX_PACKAGE_BYTES) throw new Error("WEB_RELEASE_PACKAGE_TOO_LARGE");
+      this.setStatus("importing", `正在校验界面 ${this.available.version}`, 100);
+      return this.importBuffer(bytes);
+    } catch (error) {
+      this.setStatus("failed", humanizeReleaseError(error));
+      throw error;
+    }
   }
 
   activatePending(): void {
@@ -281,7 +286,13 @@ export class WebReleaseManager {
       this.setStatus("failed", "资源包损坏或格式不受支持");
       throw new Error(`WEB_RELEASE_INVALID_PACKAGE: ${String(error)}`);
     }
-    const summary = this.validateEnvelope(envelope);
+    let summary: WebReleaseSummary;
+    try {
+      summary = this.validateEnvelope(envelope);
+    } catch (error) {
+      this.setStatus("failed", "资源包完整性校验失败");
+      throw error;
+    }
     if (!summary.compatible) {
       this.setStatus("incompatible", `界面 ${summary.version} 需要客户端 ${summary.minDesktopVersion} 或更高版本`);
       throw new Error("WEB_RELEASE_REQUIRES_DESKTOP_UPDATE");
@@ -304,6 +315,7 @@ export class WebReleaseManager {
       renameSync(staging, target);
     } catch (error) {
       rmSync(staging, { recursive: true, force: true });
+      this.setStatus("failed", "资源包无法写入本地版本目录");
       throw error;
     }
     this.state.pendingVersion = summary.version;
@@ -471,10 +483,26 @@ function safeRelativePath(path: string): boolean {
 
 function digestFileIndex(files: WebPackageFile[]): string {
   const index = [...files]
-    .sort((left, right) => left.path.localeCompare(right.path))
+    .sort((left, right) => comparePath(left.path, right.path))
     .map((file) => `${file.path}\0${file.size}\0${file.sha256}\n`)
     .join("");
   return createHash("sha256").update(index).digest("hex");
+}
+
+function comparePath(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function readBundledVersion(path: string, fallback: string): string {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(path, ".inventory-hub-web.json"), "utf8"),
+    ) as { uiVersion?: string };
+    if (manifest.uiVersion) return normalizeVersion(manifest.uiVersion);
+  } catch {
+    // Development runs do not necessarily have a packaged Web directory yet.
+  }
+  return normalizeVersion(fallback);
 }
 
 function humanizeReleaseError(error: unknown): string {

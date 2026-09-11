@@ -58,6 +58,16 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Package Web release
+        shell: pwsh
+        run: |
+          $desktop = Get-Content "apps/desktop/package.json" | ConvertFrom-Json
+          $web = Get-Content "apps/web/package.json" | ConvertFrom-Json
+          pnpm --filter @inventory-hub/web package:release -- `
+            --version $web.version `
+            --min-desktop $desktop.version `
+            --notes "支持独立更新界面资源，客户端改动请查看本版本安装包。"
+
       - name: Package desktop
         run: pnpm --filter @inventory-hub/desktop run package:win:x64
 
@@ -70,6 +80,8 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.zip
             apps/desktop/release/*.blockmap
+            apps/web/release/*.ihweb
+            apps/web/release/*.json
           if-no-files-found: error
           retention-days: 14
 
@@ -81,8 +93,12 @@ jobs:
         run: |
           $package = Get-Content "apps/desktop/package.json" | ConvertFrom-Json
           $tag = "v$($package.version)"
-          $assets = Get-ChildItem "apps/desktop/release" -File |
-            Where-Object { $_.Extension -in ".exe", ".zip", ".blockmap" }
+          $assets = @(
+            Get-ChildItem "apps/desktop/release" -File |
+              Where-Object { $_.Extension -in ".exe", ".zip", ".blockmap" }
+            Get-ChildItem "apps/web/release" -File |
+              Where-Object { $_.Extension -in ".ihweb", ".json" }
+          )
 
           if (-not $assets) {
             throw "No Windows release assets were generated."
@@ -94,9 +110,16 @@ jobs:
               --repo "${{ github.repository }}" `
               --clobber
           } else {
+            $notesPath = Join-Path $env:RUNNER_TEMP "inventory-hub-release-notes.md"
+            @"
+          本版本包含新的 Windows 客户端和可独立导入的 Web 界面资源包。
+
+          - Windows 客户端：安装后可在“设置 → 关于与健康 → 界面更新”中更新界面。
+          - Web 资源包：适用于 Inventory Hub $tag 及兼容的新版本客户端。
+          "@ | Set-Content -Path $notesPath -Encoding utf8
             gh release create $tag $assets.FullName `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
               --title "Inventory Hub $tag" `
-              --generate-notes
+              --notes-file $notesPath
           }

@@ -198,12 +198,14 @@ async function bootstrap(): Promise<void> {
   }
   createTray();
   await loadApplication(mainWindow, config.webUrl);
-  webReleaseManager.armHealthTimeout(scheduleRelaunch);
-  setTimeout(() => void webReleaseManager?.checkForUpdate(), 5_000);
-  webUpdateTimer = setInterval(
-    () => void webReleaseManager?.checkForUpdate(),
-    4 * 60 * 60 * 1_000,
-  );
+  if (config.mode === "desktop") {
+    webReleaseManager.armHealthTimeout(scheduleRelaunch);
+    setTimeout(() => void webReleaseManager?.checkForUpdate(), 5_000);
+    webUpdateTimer = setInterval(
+      () => void webReleaseManager?.checkForUpdate(),
+      4 * 60 * 60 * 1_000,
+    );
+  }
   if (config.mode === "desktop") {
     await applyAndPublishPrintPreferences({
       window: mainWindow,

@@ -9,6 +9,21 @@ import { defineConfig, type Plugin } from "vite";
 const webPackage = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ) as { version: string };
+const webVersion = process.env.INVENTORY_HUB_WEB_VERSION || webPackage.version;
+
+function webVersionManifest(): Plugin {
+  return {
+    name: "inventory-hub-web-version-manifest",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: ".inventory-hub-web.json",
+        source: `${JSON.stringify({ uiVersion: webVersion })}\n`,
+      });
+    },
+  };
+}
 
 function lanCertificateDirectory() {
   const dataDirectory = process.platform === "darwin"
@@ -58,9 +73,9 @@ function developmentCertificatePortal(): Plugin {
 
 export default defineConfig({
   define: {
-    __INVENTORY_HUB_WEB_VERSION__: JSON.stringify(webPackage.version),
+    __INVENTORY_HUB_WEB_VERSION__: JSON.stringify(webVersion),
   },
-  plugins: [react(), developmentCertificatePortal()],
+  plugins: [react(), developmentCertificatePortal(), webVersionManifest()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     host: "0.0.0.0",

@@ -26,7 +26,7 @@ import { consumeLocalNativeQueue } from "@/lib/localPrinting";
 import { useBodyScrollLock } from "@/lib/scrollLock";
 import { useTheme } from "@/lib/theme";
 import { Badge, Button } from "./AntUi";
-import { reportWebReleaseReady, useWebReleaseStatus } from "@/lib/webRelease";
+import { useWebReleaseStatus } from "@/lib/webRelease";
 
 const primary = [
   { to: "/", label: "概览", icon: <AppstoreOutlined /> },
@@ -74,7 +74,6 @@ export function AppShell() {
   );
 
   useEffect(() => setDrawer(false), [location.pathname]);
-  useEffect(() => reportWebReleaseReady(), []);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);

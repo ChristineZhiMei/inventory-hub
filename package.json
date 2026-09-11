@@ -1,6 +1,6 @@
 {
   "name": "inventory-hub",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "description": "Local-first inventory archive and location management application",
   "license": "UNLICENSED",
@@ -27,6 +27,7 @@
     "clean": "pnpm -r --if-present clean",
     "package:mac:arm64": "pnpm build && pnpm --filter @inventory-hub/desktop package:mac:arm64",
     "package:mac:x64": "pnpm build && pnpm --filter @inventory-hub/desktop package:mac:x64",
-    "package:win:x64": "pnpm build && pnpm --filter @inventory-hub/desktop package:win:x64"
+    "package:win:x64": "pnpm build && pnpm --filter @inventory-hub/desktop package:win:x64",
+    "package:web": "pnpm build:web && pnpm --filter @inventory-hub/web package:release"
   }
 }
