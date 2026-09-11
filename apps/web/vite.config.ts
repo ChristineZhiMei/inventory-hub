@@ -6,6 +6,10 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
+const webPackage = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 function lanCertificateDirectory() {
   const dataDirectory = process.platform === "darwin"
     ? join(homedir(), "Library", "Application Support", "Inventory Hub")
@@ -53,6 +57,9 @@ function developmentCertificatePortal(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __INVENTORY_HUB_WEB_VERSION__: JSON.stringify(webPackage.version),
+  },
   plugins: [react(), developmentCertificatePortal()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {

@@ -41,6 +41,7 @@ import {
 } from "@/lib/scanSound";
 import type { PrintPairing } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
+import { useWebReleaseStatus } from "@/lib/webRelease";
 import { QueryError } from "@/components/Page";
 import {
   Alert,
@@ -1187,6 +1188,7 @@ function AboutSettings() {
   });
   return (
     <div className="space-y-6">
+      {window.inventoryHub?.getWebReleaseStatus && <WebReleaseSettings />}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1196,7 +1198,7 @@ function AboutSettings() {
         </CardHeader>
         <CardContent>
           <dl className="grid gap-3 sm:grid-cols-2">
-            <InfoBox label="Web 版本" value="0.1.0" />
+            <InfoBox label="Web 版本" value={__INVENTORY_HUB_WEB_VERSION__} />
             <InfoBox
               label="部署模式"
               value={
@@ -1267,6 +1269,134 @@ function AboutSettings() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function WebReleaseSettings() {
+  const status = useWebReleaseStatus();
+  const [action, setAction] = useState<"check" | "select" | "download" | "apply" | "restore" | "open" | null>(null);
+  const [error, setError] = useState("");
+  const bridge = window.inventoryHub;
+  const available = status?.available;
+  const pending = status?.pending;
+
+  async function run(
+    name: NonNullable<typeof action>,
+    task: () => Promise<unknown>,
+  ) {
+    setAction(name);
+    setError("");
+    try {
+      await task();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setAction(null);
+    }
+  }
+
+  const statusTone = status?.phase === "failed"
+    ? "error"
+    : status?.phase === "incompatible"
+      ? "warning"
+      : status?.phase === "available" || status?.phase === "ready"
+        ? "success"
+        : "info";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <RefreshCw className="size-5" />
+          界面更新
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <InfoBox label="当前界面" value={status?.currentVersion || __INVENTORY_HUB_WEB_VERSION__} />
+          <InfoBox label="客户端内置界面" value={status?.bundledVersion || "—"} />
+          <InfoBox label="来源" value={status?.source === "imported" ? "已导入资源包" : "客户端内置"} />
+        </dl>
+
+        {status?.message && (
+          <Alert title={status.message} tone={statusTone} className="mt-4">
+            {available?.releaseNotes || pending?.releaseNotes}
+          </Alert>
+        )}
+        {available && (
+          <div className="mt-4 rounded-md border bg-muted/40 p-4 text-sm">
+            <p className="font-medium">可用界面版本 {available.version}</p>
+            <p className="mt-1 text-muted-foreground">
+              需要客户端 {available.minDesktopVersion} 或更高版本
+            </p>
+          </div>
+        )}
+        {pending && (
+          <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-4 text-sm">
+            <p className="font-medium">界面 {pending.version} 已准备好</p>
+            <p className="mt-1 text-muted-foreground">应用时客户端会重新启动，数据库和图片不会受到影响。</p>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            loading={action === "check" || status?.phase === "checking"}
+            onClick={() => void run("check", () => bridge!.checkWebReleaseUpdate!())}
+          >
+            <RefreshCw className="size-4" />
+            检查更新
+          </Button>
+          <Button
+            variant="outline"
+            loading={action === "select" || status?.phase === "importing"}
+            onClick={() => void run("select", () => bridge!.selectWebReleasePackage!())}
+          >
+            <Upload className="size-4" />
+            选择资源包
+          </Button>
+          {available?.compatible && !pending && (
+            <Button
+              loading={action === "download" || status?.phase === "downloading"}
+              onClick={() => void run("download", () => bridge!.downloadWebReleaseUpdate!())}
+            >
+              下载界面更新
+            </Button>
+          )}
+          {pending && (
+            <Button
+              loading={action === "apply"}
+              onClick={() => void run("apply", () => bridge!.applyWebRelease!())}
+            >
+              应用并重启
+            </Button>
+          )}
+          {available && !available.compatible && available.clientDownloadUrl && (
+            <Button
+              loading={action === "open"}
+              onClick={() => void run("open", () => bridge!.openWebReleaseClientDownload!(available.clientDownloadUrl!))}
+            >
+              <ExternalLink className="size-4" />
+              下载新客户端
+            </Button>
+          )}
+          {status?.source === "imported" && (
+            <Button
+              variant="ghost"
+              loading={action === "restore"}
+              onClick={() => {
+                if (window.confirm("恢复客户端内置界面并重新启动？")) {
+                  void run("restore", () => bridge!.restoreBundledWebRelease!());
+                }
+              }}
+            >
+              恢复内置界面
+            </Button>
+          )}
+        </div>
+        {error && <Alert title="界面更新操作失败" tone="error" className="mt-4">{error}</Alert>}
+      </CardContent>
+    </Card>
   );
 }
 

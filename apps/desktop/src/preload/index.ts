@@ -59,6 +59,8 @@ const api: InventoryHubDesktopApi = {
     ipcRenderer.invoke("desktop:apply-web-release") as Promise<WebReleaseActionResult>,
   restoreBundledWebRelease: () =>
     ipcRenderer.invoke("desktop:restore-bundled-web-release") as Promise<WebReleaseActionResult>,
+  openWebReleaseClientDownload: (url: string) =>
+    ipcRenderer.invoke("desktop:open-web-release-client-download", url) as Promise<void>,
   reportWebReleaseReady: () =>
     ipcRenderer.invoke("desktop:report-web-release-ready") as Promise<void>,
 };

@@ -89,6 +89,13 @@ export function registerDesktopIpc(options: {
     restoreBundledWebRelease();
     return { restartScheduled: true };
   });
+  handle("desktop:open-web-release-client-download", async (_event, value: string) => {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "github.com" || !url.pathname.startsWith("/ChristineZhiMei/inventory-hub/")) {
+      throw new Error("INVALID_CLIENT_DOWNLOAD_URL");
+    }
+    await shell.openExternal(url.toString());
+  });
   handle("desktop:report-web-release-ready", () => webReleases.markReady());
   handle("desktop:set-lan-enabled", async (_event, enabled: boolean): Promise<LanConfigurationResult> => {
     if (typeof enabled !== "boolean") throw new Error("INVALID_LAN_ENABLED_VALUE");

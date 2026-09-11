@@ -251,6 +251,20 @@ body {
   }
 }
 
+.web-update-button {
+  flex: 0 0 auto;
+
+  @media (max-width: 479px) {
+    width: 34px !important;
+    min-width: 34px !important;
+    padding-inline: 0 !important;
+
+    span:not(.anticon) {
+      display: none;
+    }
+  }
+}
+
 .mobile-menu-trigger {
   flex: 0 0 auto;
 

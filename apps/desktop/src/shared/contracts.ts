@@ -197,5 +197,6 @@ export interface InventoryHubDesktopApi {
   downloadWebReleaseUpdate(): Promise<WebReleaseStatus>;
   applyWebRelease(): Promise<WebReleaseActionResult>;
   restoreBundledWebRelease(): Promise<WebReleaseActionResult>;
+  openWebReleaseClientDownload(url: string): Promise<void>;
   reportWebReleaseReady(): Promise<void>;
 }

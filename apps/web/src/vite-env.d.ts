@@ -1,5 +1,27 @@
 /// <reference types="vite/client" />
 
+declare const __INVENTORY_HUB_WEB_VERSION__: string;
+
+interface InventoryHubWebReleaseSummary {
+  version: string;
+  releaseNotes?: string;
+  minDesktopVersion: string;
+  compatible: boolean;
+  clientDownloadUrl?: string;
+}
+
+interface InventoryHubWebReleaseStatus {
+  phase: "idle" | "checking" | "available" | "downloading" | "importing" | "ready" | "applying" | "failed" | "incompatible";
+  currentVersion: string;
+  bundledVersion: string;
+  source: "bundled" | "imported";
+  available?: InventoryHubWebReleaseSummary;
+  pending?: InventoryHubWebReleaseSummary;
+  downloadProgress?: number;
+  message?: string;
+  updatedAt: string;
+}
+
 interface Window {
   inventoryHub?: {
     selectMediaDirectory?: () => Promise<{
@@ -64,6 +86,17 @@ interface Window {
       lanEnabled?: boolean;
       url?: string;
     }>;
+    getWebReleaseStatus?: () => Promise<InventoryHubWebReleaseStatus>;
+    onWebReleaseStatus?: (
+      listener: (status: InventoryHubWebReleaseStatus) => void,
+    ) => () => void;
+    checkWebReleaseUpdate?: () => Promise<InventoryHubWebReleaseStatus>;
+    selectWebReleasePackage?: () => Promise<InventoryHubWebReleaseStatus>;
+    downloadWebReleaseUpdate?: () => Promise<InventoryHubWebReleaseStatus>;
+    applyWebRelease?: () => Promise<{ restartScheduled: boolean }>;
+    restoreBundledWebRelease?: () => Promise<{ restartScheduled: boolean }>;
+    openWebReleaseClientDownload?: (url: string) => Promise<void>;
+    reportWebReleaseReady?: () => Promise<void>;
   };
   inventoryHubRemote?: {
     getEnvironment?: () => Promise<{

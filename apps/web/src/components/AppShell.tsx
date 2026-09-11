@@ -15,6 +15,7 @@ import {
   SunOutlined,
   TagsOutlined,
   UserOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { Menu, Switch } from "antd";
 import { Popup, TabBar } from "antd-mobile";
@@ -25,6 +26,7 @@ import { consumeLocalNativeQueue } from "@/lib/localPrinting";
 import { useBodyScrollLock } from "@/lib/scrollLock";
 import { useTheme } from "@/lib/theme";
 import { Badge, Button } from "./AntUi";
+import { reportWebReleaseReady, useWebReleaseStatus } from "@/lib/webRelease";
 
 const primary = [
   { to: "/", label: "概览", icon: <AppstoreOutlined /> },
@@ -64,6 +66,7 @@ export function AppShell() {
   const [drawer, setDrawer] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const [revision, setRevision] = useState(0);
+  const webRelease = useWebReleaseStatus();
   useBodyScrollLock(drawer);
   const selectedRoute = useMemo(
     () => currentRoute(location.pathname),
@@ -71,6 +74,7 @@ export function AppShell() {
   );
 
   useEffect(() => setDrawer(false), [location.pathname]);
+  useEffect(() => reportWebReleaseReady(), []);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -176,6 +180,17 @@ export function AppShell() {
             <MenuOutlined />
           </Button>
           <div className="app-header__spacer" />
+          {webRelease && ["available", "ready", "incompatible"].includes(webRelease.phase) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="web-update-button"
+              onClick={() => navigate("/settings/about")}
+            >
+              <DownloadOutlined />
+              <span>界面更新</span>
+            </Button>
+          )}
           <Badge variant={online ? "success" : "warning"} className="online-state">
             {online ? "服务在线" : "离线"}
           </Badge>
