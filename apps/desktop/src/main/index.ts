@@ -17,6 +17,7 @@ import { SafeStorageRemoteCredentialStore } from "./remote-credential-store";
 import { registerRemotePrintIpc } from "./remote-ipc";
 import { RemotePrintExecutor } from "./remote-print-executor";
 import { CoreServiceSupervisor } from "./service-supervisor";
+import { WebReleaseManager } from "./web-release-manager";
 
 const MAX_RESTARTS_PER_WINDOW = 3;
 const RESTART_WINDOW_MS = 10 * 60 * 1_000;
@@ -30,6 +31,8 @@ let lanGateway: LanHttpsGateway | null = null;
 let certificatePortal: LanCertificatePortal | null = null;
 let remotePrintExecutor: RemotePrintExecutor | null = null;
 let unregisterIpc: (() => void) | null = null;
+let webReleaseManager: WebReleaseManager | null = null;
+let webUpdateTimer: NodeJS.Timeout | null = null;
 let restartInProgress = false;
 let restartAttempts: number[] = [];
 let quitRequested = false;
@@ -50,6 +53,11 @@ function registerApplicationEvents(): void {
   app.on("second-instance", () => showMainWindow());
 
   app.whenReady().then(bootstrap).catch((error) => {
+    if (webReleaseManager?.status.pending) {
+      webReleaseManager.rollbackPendingActivation();
+      scheduleRelaunch();
+      return;
+    }
     // Keep the main loop responsive while the error is visible. A synchronous
     // error box can block SIGTERM/app.quit indefinitely in unattended launches.
     void dialog
@@ -81,6 +89,7 @@ function registerApplicationEvents(): void {
     event.preventDefault();
     if (cleanupInProgress) return;
     cleanupInProgress = true;
+    if (webUpdateTimer) clearInterval(webUpdateTimer);
     const forcedExit = setTimeout(() => process.exit(1), 15_000);
     const cleanupTasks = [coreService?.stop(), remotePrintExecutor?.stop(), lanGateway?.stop(), certificatePortal?.stop()].filter(
       (task): task is Promise<void> => Boolean(task),
@@ -107,7 +116,14 @@ async function bootstrap(): Promise<void> {
   app.setAppLogsPath();
   const store = new DesktopConfigStore();
   desktopConfigStore = store;
-  config = store.loadRuntimeConfig();
+  webReleaseManager = new WebReleaseManager({
+    userDataPath: app.getPath("userData"),
+    bundledPath: join(process.resourcesPath, "web"),
+    bundledVersion: app.getVersion(),
+    desktopVersion: app.getVersion(),
+  });
+  webReleaseManager.prepareStartup();
+  config = store.loadRuntimeConfig(webReleaseManager.getActiveWebPath());
   store.ensureRuntimeDirectories(config);
 
   coreService = new CoreServiceSupervisor(config);
@@ -169,10 +185,25 @@ async function bootstrap(): Promise<void> {
       config,
       configStore: store,
       service: coreService,
+      webReleases: webReleaseManager,
+      applyWebRelease: () => {
+        webReleaseManager?.activatePending();
+        scheduleRelaunch();
+      },
+      restoreBundledWebRelease: () => {
+        webReleaseManager?.restoreBundled();
+        scheduleRelaunch();
+      },
     });
   }
   createTray();
   await loadApplication(mainWindow, config.webUrl);
+  webReleaseManager.armHealthTimeout(scheduleRelaunch);
+  setTimeout(() => void webReleaseManager?.checkForUpdate(), 5_000);
+  webUpdateTimer = setInterval(
+    () => void webReleaseManager?.checkForUpdate(),
+    4 * 60 * 60 * 1_000,
+  );
   if (config.mode === "desktop") {
     await applyAndPublishPrintPreferences({
       window: mainWindow,
@@ -372,4 +403,11 @@ function humanizeError(error: unknown): string {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+function scheduleRelaunch(): void {
+  setTimeout(() => {
+    app.relaunch();
+    app.quit();
+  }, 300);
 }

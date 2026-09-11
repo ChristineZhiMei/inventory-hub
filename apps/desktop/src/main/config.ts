@@ -73,7 +73,7 @@ export class DesktopConfigStore {
     this.configPath = join(app.getPath("userData"), "config", "desktop.json");
   }
 
-  loadRuntimeConfig(): DesktopRuntimeConfig {
+  loadRuntimeConfig(webDistPath = join(process.resourcesPath, "web")): DesktopRuntimeConfig {
     let persisted = this.readPersisted();
     const remoteUrl = parseRemoteUrl(
       process.env.INVENTORY_HUB_REMOTE_URL ?? persisted.remoteUrl,
@@ -150,7 +150,7 @@ export class DesktopConfigStore {
       dataDir: userData,
       mediaDir: join(userData, "media"),
       logDir: app.getPath("logs"),
-      webDistPath: join(process.resourcesPath, "web"),
+      webDistPath,
     };
     if (remoteUrl) config.remoteUrl = remoteUrl;
     if (lanOrigin) config.lanOrigin = lanOrigin;

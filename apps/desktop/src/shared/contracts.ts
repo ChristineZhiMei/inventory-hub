@@ -44,6 +44,41 @@ export interface DesktopEnvironment {
   userDataPath: string;
 }
 
+export type WebReleasePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "importing"
+  | "ready"
+  | "applying"
+  | "failed"
+  | "incompatible";
+
+export interface WebReleaseSummary {
+  version: string;
+  releaseNotes?: string;
+  minDesktopVersion: string;
+  compatible: boolean;
+  clientDownloadUrl?: string;
+}
+
+export interface WebReleaseStatus {
+  phase: WebReleasePhase;
+  currentVersion: string;
+  bundledVersion: string;
+  source: "bundled" | "imported";
+  available?: WebReleaseSummary;
+  pending?: WebReleaseSummary;
+  downloadProgress?: number;
+  message?: string;
+  updatedAt: string;
+}
+
+export interface WebReleaseActionResult {
+  restartScheduled: boolean;
+}
+
 export interface LanConfigurationResult {
   enabled: boolean;
   restartScheduled: true;
@@ -155,4 +190,12 @@ export interface InventoryHubDesktopApi {
   getPrintPreferences(): Promise<LocalPrintPreferences>;
   setPrintPreferences(preferences: LocalPrintPreferences): Promise<LocalPrintPreferences>;
   printLabel(request: PrintLabelRequest): Promise<PrintLabelResult>;
+  getWebReleaseStatus(): Promise<WebReleaseStatus>;
+  onWebReleaseStatus(listener: (status: WebReleaseStatus) => void): () => void;
+  checkWebReleaseUpdate(): Promise<WebReleaseStatus>;
+  selectWebReleasePackage(): Promise<WebReleaseStatus>;
+  downloadWebReleaseUpdate(): Promise<WebReleaseStatus>;
+  applyWebRelease(): Promise<WebReleaseActionResult>;
+  restoreBundledWebRelease(): Promise<WebReleaseActionResult>;
+  reportWebReleaseReady(): Promise<void>;
 }

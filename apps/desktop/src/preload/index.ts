@@ -10,6 +10,8 @@ import type {
   PrintLabelResult,
   SelectedDirectory,
   ServiceStatus,
+  WebReleaseActionResult,
+  WebReleaseStatus,
 } from "../shared/contracts";
 
 const api: InventoryHubDesktopApi = {
@@ -40,6 +42,25 @@ const api: InventoryHubDesktopApi = {
     ) as Promise<LocalPrintPreferences>,
   printLabel: (request: PrintLabelRequest) =>
     ipcRenderer.invoke("desktop:print-label", request) as Promise<PrintLabelResult>,
+  getWebReleaseStatus: () =>
+    ipcRenderer.invoke("desktop:get-web-release-status") as Promise<WebReleaseStatus>,
+  onWebReleaseStatus: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: WebReleaseStatus) => listener(status);
+    ipcRenderer.on("desktop:web-release-status", handler);
+    return () => ipcRenderer.removeListener("desktop:web-release-status", handler);
+  },
+  checkWebReleaseUpdate: () =>
+    ipcRenderer.invoke("desktop:check-web-release-update") as Promise<WebReleaseStatus>,
+  selectWebReleasePackage: () =>
+    ipcRenderer.invoke("desktop:select-web-release-package") as Promise<WebReleaseStatus>,
+  downloadWebReleaseUpdate: () =>
+    ipcRenderer.invoke("desktop:download-web-release-update") as Promise<WebReleaseStatus>,
+  applyWebRelease: () =>
+    ipcRenderer.invoke("desktop:apply-web-release") as Promise<WebReleaseActionResult>,
+  restoreBundledWebRelease: () =>
+    ipcRenderer.invoke("desktop:restore-bundled-web-release") as Promise<WebReleaseActionResult>,
+  reportWebReleaseReady: () =>
+    ipcRenderer.invoke("desktop:report-web-release-ready") as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld("inventoryHub", api);

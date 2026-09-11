@@ -17,6 +17,7 @@ import type {
   PrintLabelRequest,
   SelectedDirectory,
 } from "../shared/contracts";
+import type { WebReleaseManager } from "./web-release-manager";
 
 const SELECTION_LIFETIME_MS = 10 * 60 * 1_000;
 
@@ -31,8 +32,19 @@ export function registerDesktopIpc(options: {
   config: DesktopRuntimeConfig;
   configStore: DesktopConfigStore;
   service: CoreServiceSupervisor;
+  webReleases: WebReleaseManager;
+  applyWebRelease: () => void;
+  restoreBundledWebRelease: () => void;
 }): () => void {
-  const { getMainWindow, config, configStore, service } = options;
+  const {
+    getMainWindow,
+    config,
+    configStore,
+    service,
+    webReleases,
+    applyWebRelease,
+    restoreBundledWebRelease,
+  } = options;
   const grants = new Map<string, DirectoryGrant>();
   const channels: string[] = [];
 
@@ -61,6 +73,23 @@ export function registerDesktopIpc(options: {
     userDataPath: app.getPath("userData"),
   }));
   handle("desktop:get-service-status", () => service.status);
+  handle("desktop:get-web-release-status", () => webReleases.status);
+  handle("desktop:check-web-release-update", () => webReleases.checkForUpdate());
+  handle("desktop:select-web-release-package", async () => {
+    const window = getMainWindow();
+    if (!window) throw new Error("WINDOW_UNAVAILABLE");
+    return webReleases.selectAndImport(window);
+  });
+  handle("desktop:download-web-release-update", () => webReleases.downloadAvailable());
+  handle("desktop:apply-web-release", () => {
+    applyWebRelease();
+    return { restartScheduled: true };
+  });
+  handle("desktop:restore-bundled-web-release", () => {
+    restoreBundledWebRelease();
+    return { restartScheduled: true };
+  });
+  handle("desktop:report-web-release-ready", () => webReleases.markReady());
   handle("desktop:set-lan-enabled", async (_event, enabled: boolean): Promise<LanConfigurationResult> => {
     if (typeof enabled !== "boolean") throw new Error("INVALID_LAN_ENABLED_VALUE");
     if (enabled && !config.lanEnabled) {
@@ -182,9 +211,16 @@ export function registerDesktopIpc(options: {
     const window = getMainWindow();
     if (window && !window.isDestroyed()) window.webContents.send("desktop:service-status", status);
   });
+  const unsubscribeWebRelease = webReleases.onStatus((status) => {
+    const window = getMainWindow();
+    if (window && !window.isDestroyed()) {
+      window.webContents.send("desktop:web-release-status", status);
+    }
+  });
 
   return () => {
     unsubscribeStatus();
+    unsubscribeWebRelease();
     for (const channel of channels) ipcMain.removeHandler(channel);
     grants.clear();
   };
