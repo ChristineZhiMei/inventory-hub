@@ -19,6 +19,8 @@ export interface ImageMeta {
 }
 
 export interface Category {
+  description?: string;
+  examples?: string[];
   id: string;
   name: string;
   parentId?: string | null;
@@ -29,6 +31,8 @@ export interface Category {
   children?: Category[];
 }
 export interface Tag {
+  description?: string;
+  examples?: string[];
   id: string;
   name: string;
   version: number;
@@ -36,6 +40,8 @@ export interface Tag {
   referenceToken?: string;
 }
 export interface Specification {
+  description?: string;
+  examples?: string[];
   id: string;
   name: string;
   version: number;

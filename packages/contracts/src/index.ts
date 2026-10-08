@@ -1,3 +1,5 @@
+export * from "./ai.js";
+import { ITEM_CATEGORY_LIMIT } from "./ai.js";
 import { z } from "zod";
 export * from "./label.js";
 
@@ -77,7 +79,7 @@ export const CreateNodeSchema = z.object({
   notes: NotesSchema.optional().default(""),
   tagIds: z.array(IdSchema).default([]),
   categoryId: IdSchema.optional(),
-  categoryIds: z.array(IdSchema).max(3).default([]),
+  categoryIds: z.array(IdSchema).max(ITEM_CATEGORY_LIMIT).default([]),
   specification: z.string().trim().max(500).optional().default(""),
   specificationIds: z.array(IdSchema).default([]),
   uploadIds: z.array(IdSchema).max(5).default([]),
@@ -120,7 +122,7 @@ export const PatchProfileSchema = z.object({
   notes: NotesSchema.optional(),
   tagIds: z.array(IdSchema).optional(),
   categoryId: IdSchema.optional(),
-  categoryIds: z.array(IdSchema).max(3).optional(),
+  categoryIds: z.array(IdSchema).max(ITEM_CATEGORY_LIMIT).optional(),
   specification: z.string().trim().max(500).optional(),
   specificationIds: z.array(IdSchema).optional(),
   images: z.array(ImageSetEntrySchema).min(0).max(5).optional(),

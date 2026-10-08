@@ -1,7 +1,8 @@
+import { ITEM_CATEGORY_LIMIT, type AiRecognitionResult } from "@inventory-hub/contracts";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Radio, Select as AntSelect, Spin } from "antd";
+import { Radio, Spin } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
 import { z } from "zod";
@@ -11,8 +12,10 @@ import type { NodePrefill } from "@/lib/nodeCopy";
 import { useMediaQuery } from "@/lib/media";
 import { pageItems, queries } from "@/lib/queries";
 import { useSelectPopupScrollGuard } from "@/lib/scrollLock";
-import type { InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
+import type { Category, InventoryNode, NodeType, Specification, Tag } from "@/lib/types";
 import { Button, Field, Input, Label, Select, Textarea } from "./AntUi";
+import { TaxonomySelect } from "./TaxonomySelect";
+import { AiRecognition } from "./AiRecognition";
 import { ImageManager, type EditableImage } from "./ImageManager";
 
 const SYSTEM_ID_PATTERN =
@@ -20,7 +23,7 @@ const SYSTEM_ID_PATTERN =
 
 const schema = z.object({
   name: z.string().trim().min(1, "请输入名称").max(120, "名称最多 120 个字符"),
-  categoryIds: z.array(z.string()).max(3, "每个档案最多选择三个分类"),
+  categoryIds: z.array(z.string()).max(ITEM_CATEGORY_LIMIT, "每个档案最多选择三个分类"),
   specificationIds: z.array(z.string()),
   notes: z.string().max(2000, "备注最多 2000 个字符").optional(),
   targetId: z.string().optional(),
@@ -61,6 +64,8 @@ export function NodeForm({
   const queryClient = useQueryClient();
   const recent = useRecentSelections();
   const recentSpecifications = recent.ids("specification").join(",");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [retainedCategories, setRetainedCategories] = useState<Category[]>([]);
   const [retainedTags, setRetainedTags] = useState<Tag[]>([]);
   const [retainedSpecifications, setRetainedSpecifications] = useState<Specification[]>([]);
   const [specificationSearchInput, setSpecificationSearchInput] = useState("");
@@ -139,8 +144,8 @@ export function NodeForm({
     [initial?.tags, prefill?.tags, retainedTags, tags.data],
   );
   const categoryOptions = useMemo(
-    () => mergeTaxonomyOptions(initial?.categories, prefill?.categories, pageItems(categories.data)),
-    [categories.data, initial?.categories, prefill?.categories],
+    () => mergeTaxonomyOptions(initial?.categories, prefill?.categories, pageItems(categories.data), retainedCategories),
+    [categories.data, initial?.categories, prefill?.categories, retainedCategories],
   );
   const specificationOptions = useMemo(
     () => mergeTaxonomyOptions(
@@ -261,7 +266,36 @@ export function NodeForm({
     }
   }
 
+  function applyRecognition(result: AiRecognitionResult) {
+    const before: AiRecognitionResult["values"] = {};
+    setRetainedCategories((current) => mergeTaxonomyOptions(current, result.options.categories));
+    setRetainedSpecifications((current) => mergeTaxonomyOptions(current, result.options.specifications));
+    setRetainedTags((current) => mergeTaxonomyOptions(current, result.options.tags));
+    const options = { shouldDirty: true, shouldValidate: true };
+    if (result.values.name !== undefined) {
+      before.name = form.getValues("name");
+      form.setValue("name", result.values.name, options);
+    }
+    for (const field of ["categoryIds", "specificationIds", "tagIds"] as const) {
+      const value = result.values[field];
+      if (value !== undefined) {
+        before[field] = [...form.getValues(field)];
+        const selected = field === "categoryIds" ? value.slice(0, ITEM_CATEGORY_LIMIT) : value;
+        const kind = field === "categoryIds" ? "category" : field === "specificationIds" ? "specification" : "tag";
+        recent.record(kind, selected, before[field]);
+        form.setValue(field, selected, options);
+      }
+    }
+    return () => {
+      if (before.name !== undefined) form.setValue("name", before.name, options);
+      for (const field of ["categoryIds", "specificationIds", "tagIds"] as const) {
+        if (before[field] !== undefined) form.setValue(field, before[field], options);
+      }
+    };
+  }
+
   async function submit(values: NodeFormData) {
+    if (aiBusy) return;
     form.clearErrors();
     if (type === "ITEM" && values.categoryIds.length === 0) {
       form.setError("categoryIds", { message: "物品必须至少选择一个分类" });
@@ -307,6 +341,11 @@ export function NodeForm({
             : undefined,
         images: usableImages,
       });
+      // Also count successfully saved prefills (copy/edit/AI), which may never
+      // pass through a select's onChange handler.
+      recent.record("category", values.categoryIds);
+      recent.record("specification", values.specificationIds);
+      recent.record("tag", values.tagIds);
     } catch (error) {
       if (error instanceof ApiError && Object.keys(error.fields).length)
         for (const [name, message] of Object.entries(error.fields))
@@ -325,7 +364,7 @@ export function NodeForm({
   }[type];
   return (
     <form onSubmit={form.handleSubmit(submit)} className="space-y-6" noValidate>
-      <section className="surface p-5">
+      <section className="surface p-5" inert={aiBusy} aria-busy={aiBusy}>
         <h2 className="font-semibold">基本信息</h2>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <Field
@@ -344,7 +383,7 @@ export function NodeForm({
                   value={field.value}
                   autoComplete="off"
                   aria-invalid={!!form.formState.errors.name}
-                  autoFocus
+                  autoFocus={!mobile}
                   placeholder={
                     type === "ITEM" ? "例如：灰色羊毛大衣" : `例如：${typeName}名称`
                   }
@@ -357,7 +396,7 @@ export function NodeForm({
             error={form.formState.errors.categoryIds?.message}
             required={type === "ITEM"}
           >
-            <AntSelect
+            <TaxonomySelect
               id="categoryIds"
               aria-label="分类"
               mode="multiple"
@@ -370,7 +409,7 @@ export function NodeForm({
               size="large"
               className="w-full"
               optionFilterProp="label"
-              maxCount={3}
+              maxCount={ITEM_CATEGORY_LIMIT}
               maxTagCount={mobile ? 1 : "responsive"}
               virtual={!mobile}
               onOpenChange={setTaxonomyPopupOpen}
@@ -388,7 +427,7 @@ export function NodeForm({
               label="规格"
               error={form.formState.errors.specificationIds?.message}
             >
-              <AntSelect
+              <TaxonomySelect
                 id="specificationIds"
                 aria-label="规格"
                 mode="tags"
@@ -427,7 +466,7 @@ export function NodeForm({
             error={form.formState.errors.tagIds?.message}
             className="md:col-span-2"
           >
-            <AntSelect
+            <TaxonomySelect
               id="tagIds"
               aria-label="标签"
               mode="tags"
@@ -472,8 +511,9 @@ export function NodeForm({
         <ImageManager
           value={images}
           onChange={setImages}
-          disabled={busy}
+          disabled={busy || aiBusy}
         />
+        {type === "ITEM" && <AiRecognition images={images} disabled={busy || !!creatingTaxonomy} onBusyChange={setAiBusy} onApply={applyRecognition} />}
       </section>
       {!initial && type !== "WAREHOUSE" && (
         <section className="surface p-5">
@@ -565,7 +605,7 @@ export function NodeForm({
           </Field>
         </section>
       )}
-      <Button type="submit" loading={busy} className="node-form-submit">
+      <Button type="submit" disabled={aiBusy} loading={busy} className="node-form-submit">
         {!initial && type === "ITEM" && form.watch("nextCreateType") !== "NONE"
           ? `创建物品并添加${typeLabel[form.watch("nextCreateType") as Exclude<NodeFormData["nextCreateType"], "NONE">]}`
           : submitLabel}

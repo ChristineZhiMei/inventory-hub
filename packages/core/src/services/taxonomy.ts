@@ -11,26 +11,26 @@ export class TaxonomyService {
   constructor(private readonly database: InventoryDatabase, private readonly idempotency: IdempotencyService) {}
 
   categories(): any[] {
-    const rows = this.database.db.prepare(`SELECT c.id,c.parent_id parentId,c.name,c.version,c.created_at createdAt,c.updated_at updatedAt,
+    const rows = this.database.db.prepare(`SELECT c.id,c.parent_id parentId,c.name,c.description,c.examples,c.version,c.created_at createdAt,c.updated_at updatedAt,
       (SELECT count(*) FROM node_categories nc WHERE nc.category_id=c.id) referenceCount,
       (SELECT count(*) FROM categories child WHERE child.parent_id=c.id) childCount FROM categories c ORDER BY c.parent_scope_key,c.name`).all() as any[];
-    return rows.map((row) => ({ ...row, referenceToken: this.categoryReferenceToken(row.id), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() }));
+    return rows.map((row) => ({ ...withExamples(row), referenceToken: this.categoryReferenceToken(row.id), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() }));
   }
 
-  createCategory(identity: RequestIdentity, input: { name: string; parentId?: string | undefined }): any {
+  createCategory(identity: RequestIdentity, input: { name: string; description?: string | undefined; examples?: string[] | undefined; parentId?: string | undefined }): any {
     return this.write(identity, () => {
       const id = randomUUID();
       const now = Date.now();
       const parentScope = input.parentId ?? "ROOT";
       if (input.parentId) { this.categoryDepth(input.parentId); }
-      this.database.db.prepare(`INSERT INTO categories(id,parent_id,name,normalized_name,parent_scope_key,version,created_at,updated_at)
-        VALUES(?,?,?,?,?,1,?,?)`).run(id, input.parentId ?? null, normalizeName(input.name), normalizedKey(input.name), parentScope, now, now);
+      this.database.db.prepare(`INSERT INTO categories(id,parent_id,name,normalized_name,parent_scope_key,version,created_at,updated_at,description,examples)
+        VALUES(?,?,?,?,?,1,?,?,?,?)`).run(id, input.parentId ?? null, normalizeName(input.name), normalizedKey(input.name), parentScope, now, now, input.description ?? "", JSON.stringify(input.examples ?? []));
       this.log(identity, "CATEGORY_CREATE", "CATEGORY", id, null, { id, ...input });
-      return { id, parentId: input.parentId ?? null, name: normalizeName(input.name), version: 1 };
+      return { id, parentId: input.parentId ?? null, name: normalizeName(input.name), description: input.description ?? "", examples: input.examples ?? [], version: 1 };
     });
   }
 
-  patchCategory(identity: RequestIdentity, id: string, input: { expectedVersion: number; name?: string | undefined; parentId?: string | null | undefined }): any {
+  patchCategory(identity: RequestIdentity, id: string, input: { expectedVersion: number; description?: string | undefined; examples?: string[] | undefined; name?: string | undefined; parentId?: string | null | undefined }): any {
     return this.write(identity, () => {
       const current = this.getCategory(id);
       invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "分类已被修改");
@@ -48,8 +48,8 @@ export class TaxonomyService {
         }
       }
       const name = input.name === undefined ? current.name : normalizeName(input.name);
-      this.database.db.prepare(`UPDATE categories SET parent_id=?,parent_scope_key=?,name=?,normalized_name=?,version=version+1,updated_at=? WHERE id=?`)
-        .run(parentId, parentId ?? "ROOT", name, normalizedKey(name), Date.now(), id);
+      this.database.db.prepare(`UPDATE categories SET parent_id=?,parent_scope_key=?,name=?,normalized_name=?,description=?,examples=?,version=version+1,updated_at=? WHERE id=?`)
+        .run(parentId, parentId ?? "ROOT", name, normalizedKey(name), input.description ?? current.description, JSON.stringify(input.examples ?? current.examples), Date.now(), id);
       const updated = this.getCategory(id);
       this.log(identity, "CATEGORY_EDIT", "CATEGORY", id, current, updated);
       return updated;
@@ -98,31 +98,31 @@ export class TaxonomyService {
   }
 
   tags(): any[] {
-    const rows = this.database.db.prepare(`SELECT t.id,t.name,t.version,t.created_at createdAt,t.updated_at updatedAt,
+    const rows = this.database.db.prepare(`SELECT t.id,t.name,t.description,t.examples,t.version,t.created_at createdAt,t.updated_at updatedAt,
       (SELECT count(*) FROM node_tags nt WHERE nt.tag_id=t.id) referenceCount FROM tags t ORDER BY t.name`).all() as any[];
-    return rows.map((row) => ({ ...row, referenceToken: this.tagReferenceToken(row.id), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() }));
+    return rows.map((row) => ({ ...withExamples(row), referenceToken: this.tagReferenceToken(row.id), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString() }));
   }
 
-  createTag(identity: RequestIdentity, name: string): any {
+  createTag(identity: RequestIdentity, name: string, description = "", examples: string[] = []): any {
     return this.write(identity, () => {
       const normalizedName = taxonomyDisplayName(name, "标签");
       const id = randomUUID();
       const now = Date.now();
-      this.database.db.prepare("INSERT INTO tags(id,name,normalized_name,version,created_at,updated_at) VALUES(?,?,?,1,?,?)")
-        .run(id, normalizedName, normalizedKey(normalizedName), now, now);
-      const value = { id, name: normalizedName, version: 1 };
+      this.database.db.prepare("INSERT INTO tags(id,name,normalized_name,version,created_at,updated_at,description,examples) VALUES(?,?,?,1,?,?,?,?)")
+        .run(id, normalizedName, normalizedKey(normalizedName), now, now, description, JSON.stringify(examples));
+      const value = { id, name: normalizedName, description, examples, version: 1 };
       this.log(identity, "TAG_CREATE", "TAG", id, null, value);
       return value;
     });
   }
 
-  patchTag(identity: RequestIdentity, id: string, input: { name: string; expectedVersion: number }): any {
+  patchTag(identity: RequestIdentity, id: string, input: { name: string; description?: string | undefined; examples?: string[] | undefined; expectedVersion: number }): any {
     return this.write(identity, () => {
       const current = this.getTag(id);
       invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "标签已被修改");
       const normalizedName = taxonomyDisplayName(input.name, "标签");
-      this.database.db.prepare("UPDATE tags SET name=?,normalized_name=?,version=version+1,updated_at=? WHERE id=?")
-        .run(normalizedName, normalizedKey(normalizedName), Date.now(), id);
+      this.database.db.prepare("UPDATE tags SET name=?,normalized_name=?,description=?,examples=?,version=version+1,updated_at=? WHERE id=?")
+        .run(normalizedName, normalizedKey(normalizedName), input.description ?? current.description, JSON.stringify(input.examples ?? current.examples), Date.now(), id);
       const updated = this.getTag(id);
       this.log(identity, "TAG_EDIT", "TAG", id, current, updated);
       return updated;
@@ -156,11 +156,11 @@ export class TaxonomyService {
     const recentOrder = recentIds.length
       ? `CASE s.id ${recentIds.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${recentIds.length} END,`
       : "";
-    const rows = this.database.db.prepare(`SELECT s.id,s.name,s.version,s.created_at createdAt,s.updated_at updatedAt,
+    const rows = this.database.db.prepare(`SELECT s.id,s.name,s.description,s.examples,s.version,s.created_at createdAt,s.updated_at updatedAt,
       (SELECT count(*) FROM node_specifications ns WHERE ns.specification_id=s.id) referenceCount
       FROM specifications s ${where} ORDER BY ${recentOrder} s.name,s.id LIMIT ? OFFSET ?`).all(...params, ...recentIds, limit + 1, offset) as any[];
     const items = rows.slice(0, limit).map((row) => ({
-      ...row,
+      ...withExamples(row),
       referenceToken: this.specificationReferenceToken(row.id),
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
@@ -168,7 +168,7 @@ export class TaxonomyService {
     return { items, nextCursor: rows.length > limit ? encodeCursor(offset + limit) : null };
   }
 
-  createSpecification(identity: RequestIdentity, name: string): any {
+  createSpecification(identity: RequestIdentity, name: string, description = "", examples: string[] = []): any {
     return this.write(identity, () => {
       const normalizedName = taxonomyDisplayName(name, "规格");
       invariant(
@@ -178,15 +178,15 @@ export class TaxonomyService {
       );
       const id = randomUUID();
       const now = Date.now();
-      this.database.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at)
-        VALUES(?,?,?,1,?,?)`).run(id, normalizedName, normalizedKey(normalizedName), now, now);
-      const value = { id, name: normalizedName, version: 1, referenceCount: 0 };
+      this.database.db.prepare(`INSERT INTO specifications(id,name,normalized_name,version,created_at,updated_at,description,examples)
+        VALUES(?,?,?,1,?,?,?,?)`).run(id, normalizedName, normalizedKey(normalizedName), now, now, description, JSON.stringify(examples));
+      const value = { id, name: normalizedName, description, examples, version: 1, referenceCount: 0 };
       this.log(identity, "SPECIFICATION_CREATE", "SPECIFICATION", id, null, value);
       return value;
     });
   }
 
-  patchSpecification(identity: RequestIdentity, id: string, input: { name: string; expectedVersion: number }): any {
+  patchSpecification(identity: RequestIdentity, id: string, input: { name: string; description?: string | undefined; examples?: string[] | undefined; expectedVersion: number }): any {
     return this.write(identity, () => {
       const current = this.getSpecification(id);
       invariant(current.version === input.expectedVersion, "VERSION_CONFLICT", "规格已被修改");
@@ -194,8 +194,8 @@ export class TaxonomyService {
       const duplicate = this.database.db.prepare("SELECT id FROM specifications WHERE normalized_name=? AND id<>?")
         .get(normalizedKey(name), id);
       invariant(!duplicate, "REFERENCE_CONFLICT", "该规格已经存在");
-      this.database.db.prepare(`UPDATE specifications SET name=?,normalized_name=?,version=version+1,updated_at=? WHERE id=?`)
-        .run(name, normalizedKey(name), Date.now(), id);
+      this.database.db.prepare(`UPDATE specifications SET name=?,normalized_name=?,description=?,examples=?,version=version+1,updated_at=? WHERE id=?`)
+        .run(name, normalizedKey(name), input.description ?? current.description, JSON.stringify(input.examples ?? current.examples), Date.now(), id);
       const updated = this.getSpecification(id);
       this.log(identity, "SPECIFICATION_EDIT", "SPECIFICATION", id, current, updated);
       return updated;
@@ -232,9 +232,9 @@ export class TaxonomyService {
   }
 
   private getCategory(id: string): any {
-    const row = this.database.db.prepare("SELECT id,parent_id parentId,name,version FROM categories WHERE id=?").get(id);
+    const row = this.database.db.prepare("SELECT id,parent_id parentId,name,description,examples,version FROM categories WHERE id=?").get(id);
     if (!row) throw new AppError("NOT_FOUND", "分类不存在");
-    return row;
+    return withExamples(row);
   }
 
   private categoryDepth(id: string): number {
@@ -245,15 +245,15 @@ export class TaxonomyService {
   }
 
   private getTag(id: string): any {
-    const row = this.database.db.prepare("SELECT id,name,version FROM tags WHERE id=?").get(id);
+    const row = this.database.db.prepare("SELECT id,name,description,examples,version FROM tags WHERE id=?").get(id);
     if (!row) throw new AppError("NOT_FOUND", "标签不存在");
-    return row;
+    return withExamples(row);
   }
 
   private getSpecification(id: string): any {
-    const row = this.database.db.prepare("SELECT id,name,version FROM specifications WHERE id=?").get(id);
+    const row = this.database.db.prepare("SELECT id,name,description,examples,version FROM specifications WHERE id=?").get(id);
     if (!row) throw new AppError("NOT_FOUND", "规格不存在");
-    return row;
+    return withExamples(row);
   }
 
   private categoryReferenceToken(id: string): string {
@@ -278,6 +278,10 @@ export class TaxonomyService {
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), identity.requestId, identity.userId, "WEB", action, subjectType, subjectId,
       before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, `${action} ${displayName}`, Date.now());
   }
+}
+
+function withExamples(row: any) {
+  return { ...row, examples: JSON.parse(row.examples) as string[] };
 }
 
 function taxonomyDisplayName(value: string, kind: "标签" | "规格"): string {

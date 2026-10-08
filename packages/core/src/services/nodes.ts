@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ITEM_CATEGORY_LIMIT } from "@inventory-hub/contracts";
 import type { CreateNodeInput, NodeType, PatchProfileInput } from "@inventory-hub/contracts";
 import type { InventoryDatabase } from "../db/database.js";
 import { AppError, invariant } from "../errors.js";
@@ -453,7 +454,7 @@ export class NodeService {
   private validateTaxonomy(categoryIds: string[], tagIds: string[], specificationIds: string[], type: NodeType, categoryUnchanged = false): void {
     const uniqueCategories = [...new Set(categoryIds)];
     invariant(uniqueCategories.length === categoryIds.length, "VALIDATION_ERROR", "分类不能重复");
-    invariant(uniqueCategories.length <= 3, "VALIDATION_ERROR", "每个档案最多选择三个分类");
+    invariant(uniqueCategories.length <= ITEM_CATEGORY_LIMIT, "VALIDATION_ERROR", "每个档案最多选择三个分类");
     if (type === "ITEM" && !categoryUnchanged) invariant(uniqueCategories.length > 0, "VALIDATION_ERROR", "物品必须至少选择一个分类");
     const findCategory = this.database.db.prepare("SELECT 1 FROM categories WHERE id=?");
     invariant(uniqueCategories.every((id) => Boolean(findCategory.get(id))), "VALIDATION_ERROR", "包含不存在的分类");

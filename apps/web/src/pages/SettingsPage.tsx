@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Checkbox, QRCode } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Sparkles,
   CircleUserRound,
   Clock3,
   Copy,
@@ -43,6 +44,7 @@ import {
 import type { PrintPairing } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 import { useWebReleaseStatus } from "@/lib/webRelease";
+import { AiSettings } from "@/components/AiSettings";
 import { QueryError } from "@/components/Page";
 import {
   Alert,
@@ -58,6 +60,7 @@ import {
 } from "@/components/AntUi";
 
 const pages = [
+  { id: "ai", label: "AI 识别", icon: Sparkles },
   { id: "account", label: "账号", icon: CircleUserRound },
   { id: "storage", label: "图片存储", icon: HardDrive },
   { id: "lan", label: "局域网访问", icon: Network },
@@ -101,7 +104,9 @@ export function SettingsPage() {
           ))}
         </nav>
         <section className="min-w-0">
-          {section === "account" ? (
+          {section === "ai" ? (
+            <AiSettings />
+          ) : section === "account" ? (
             <AccountSettings />
           ) : section === "storage" ? (
             <StorageSettings />

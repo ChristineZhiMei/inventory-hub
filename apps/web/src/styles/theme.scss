@@ -693,6 +693,42 @@ body {
   }
 }
 
+.taxonomy-toolbar {
+  .page-toolbar__filters {
+    flex: 1 1 360px;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .taxonomy-search {
+    flex: 1 1 220px;
+    min-width: 0;
+    width: auto;
+    max-width: 360px;
+  }
+
+  @media (max-width: 767px) {
+    .page-toolbar__filters {
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    .ant-segmented {
+      max-width: 100%;
+    }
+
+    .ant-segmented-item-label {
+      padding-inline: 8px;
+    }
+
+    .taxonomy-search {
+      flex-basis: 100%;
+      width: 100%;
+      max-width: 100%;
+    }
+  }
+}
+
 .location-toolbar {
   @media (max-width: 767px) {
     display: grid;

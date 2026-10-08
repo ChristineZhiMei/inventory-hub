@@ -41,6 +41,32 @@ export class InventoryDatabase {
 
   private migrate(): void {
     this.db.exec(schemaSql);
+    this.db.transaction(() => {
+      const aiColumns = this.db.pragma("table_info(ai_settings)") as Array<{ name: string }>;
+      if (!aiColumns.some((column) => column.name === "name_prompt")) {
+        this.db.exec("ALTER TABLE ai_settings ADD COLUMN name_prompt TEXT NOT NULL DEFAULT '' CHECK(length(name_prompt)<=300)");
+      }
+      for (const table of ["categories", "tags", "specifications"]) {
+        const columns = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+        if (!columns.some((column) => column.name === "description")) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN description TEXT NOT NULL DEFAULT '' CHECK(length(description)<=30)`);
+        }
+        if (!columns.some((column) => column.name === "examples")) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(examples) AND json_type(examples)='array' AND json_array_length(examples)<=10)`);
+        }
+      }
+    })();
+    // Preserve descriptions saved while an earlier development build used 50 characters.
+    const rulesSchema = this.db.prepare("SELECT sql FROM sqlite_master WHERE name='ai_selection_rules'").get() as { sql: string };
+    if (/length\(categories\)\s*<=\s*50\b/.test(rulesSchema.sql)) {
+      this.db.transaction(() => {
+        this.db.exec("ALTER TABLE ai_selection_rules RENAME TO ai_selection_rules_legacy");
+        this.db.exec(schemaSql);
+        this.db.exec(`INSERT OR REPLACE INTO ai_selection_rules(singleton_id,categories,specifications,tags,version)
+          SELECT singleton_id,categories,specifications,tags,version FROM ai_selection_rules_legacy;
+          DROP TABLE ai_selection_rules_legacy;`);
+      })();
+    }
     this.migrateLegacyCategories();
     this.migrateLegacySpecifications();
     this.migrateCombinedSpecifications();

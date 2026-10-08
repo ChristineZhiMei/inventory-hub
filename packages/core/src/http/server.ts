@@ -6,6 +6,10 @@ import { extname, resolve, sep } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import {
+  AI_FIELDS,
+  AI_NAME_PROMPT_LIMIT,
+  AI_OPTION_EXAMPLE_LIMIT,
+  AI_OPTION_EXAMPLE_LENGTH,
   CreateNodeSchema,
   DeleteNodeSchema,
   OperationInputSchema,
@@ -18,6 +22,7 @@ import { loadConfig, type InventoryConfigInput } from "../config.js";
 import { InventoryDatabase } from "../db/database.js";
 import { SCHEMA_VERSION } from "../db/schema.js";
 import { AppError } from "../errors.js";
+import { AiService } from "../services/ai.js";
 import { AuthService } from "../services/auth.js";
 import { IdempotencyService, type RequestIdentity } from "../services/idempotency.js";
 import { InventoryService } from "../services/inventory.js";
@@ -48,6 +53,15 @@ const publicRoutes = new Set([
   "/api/v1/print-executors/claim-pairing",
 ]);
 
+const taxonomyExamplesSchema = z.array(z.string().trim().min(1).max(AI_OPTION_EXAMPLE_LENGTH))
+  .max(AI_OPTION_EXAMPLE_LIMIT).transform((examples) => [...new Set(examples)]);
+
+const aiCredentialsSchema = z.object({
+  model: z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9._-]+$/),
+  apiKey: z.string().trim().min(1).max(2048).regex(/^[\x21-\x7E]+$/).optional(),
+  expectedVersion: z.number().int().positive(),
+});
+
 export const createInventoryServer = (configInput: InventoryConfigInput = {}): InventoryServer => {
   const config = loadConfig(configInput);
   const database = new InventoryDatabase(config);
@@ -57,6 +71,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   const nodes = new NodeService(database, idempotency, media);
   const inventory = new InventoryService(database, idempotency);
   const taxonomy = new TaxonomyService(database, idempotency);
+  const ai = new AiService(database, media);
   const printing = new PrintService(database, idempotency, config.simulatePrinting, config.appMode);
   const https = config.tlsCertPath && config.tlsKeyPath ? { cert: readFileSync(config.tlsCertPath), key: readFileSync(config.tlsKeyPath) } : undefined;
   const publicHttps = config.protocol === "https" || config.appOrigins.some((origin) => origin.startsWith("https://"));
@@ -285,13 +300,48 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     return bytes;
   });
 
+  app.get("/api/v1/settings/ai", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return success(ai.settings(), request.id);
+  });
+  app.put("/api/v1/settings/ai", async (request, reply) => {
+    const body = aiCredentialsSchema.extend({
+      clearApiKey: z.boolean().optional(),
+      namePrompt: z.string().trim().max(AI_NAME_PROMPT_LIMIT).optional(),
+    }).strict().parse(request.body);
+    reply.header("Cache-Control", "no-store");
+    return success(ai.updateSettings(body), request.id);
+  });
+  app.post("/api/v1/settings/ai/test", async (request, reply) => {
+    const body = aiCredentialsSchema.strict().parse(request.body);
+    reply.header("Cache-Control", "no-store");
+    return success(await ai.testConnection(requestAuth(request).userId, body), request.id);
+  });
+  app.get("/api/v1/ai/selection-rules", async (request) => success(ai.rules(), request.id));
+  app.put("/api/v1/ai/selection-rules", async (request) => {
+    const body = z.object({
+      categories: z.string().trim().max(300), specifications: z.string().trim().max(300), tags: z.string().trim().max(300),
+      expectedVersion: z.number().int().positive(),
+    }).strict().parse(request.body);
+    return success(ai.updateRules(body), request.id);
+  });
+  app.post("/api/v1/ai/recognize", async (request, reply) => {
+    const body = z.object({
+      fields: z.array(z.enum(AI_FIELDS)).min(1).max(4).transform((fields) => [...new Set(fields)]),
+      images: z.array(z.union([z.object({ imageId: z.string().uuid() }).strict(), z.object({ uploadId: z.string().uuid() }).strict()])).min(1).max(5),
+      clientId: z.string().uuid(),
+    }).strict().parse(request.body);
+    reply.header("Cache-Control", "no-store");
+    return success(await ai.recognize(requestAuth(request).userId, body), request.id);
+  });
+
   app.get("/api/v1/categories", async (request) => success(taxonomy.categories(), request.id));
   app.post("/api/v1/categories", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(3), parentId: z.string().uuid().optional() }).parse(request.body);
+    const body = z.object({ name: z.string().trim().min(1).max(3), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional(), parentId: z.string().uuid().optional() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createCategory(identity, body)), writeRequestId(request));
   });
   app.patch<{ Params: { id: string } }>("/api/v1/categories/:id", async (request) => {
-    const body = z.object({ expectedVersion: z.number().int().positive(), name: z.string().trim().min(1).max(3).optional(), parentId: z.string().uuid().nullable().optional() }).parse(request.body);
+    const body = z.object({ expectedVersion: z.number().int().positive(), name: z.string().trim().min(1).max(3).optional(), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional(), parentId: z.string().uuid().nullable().optional() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.patchCategory(identity, request.params.id, body)), writeRequestId(request));
   });
   app.delete<{ Params: { id: string } }>("/api/v1/categories/:id", async (request) => {
@@ -304,11 +354,11 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   });
   app.get("/api/v1/tags", async (request) => success(taxonomy.tags(), request.id));
   app.post("/api/v1/tags", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(120) }).parse(request.body);
-    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createTag(identity, body.name)), writeRequestId(request));
+    const body = z.object({ name: z.string().trim().min(1).max(120), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional() }).parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createTag(identity, body.name, body.description, body.examples)), writeRequestId(request));
   });
   app.patch<{ Params: { id: string } }>("/api/v1/tags/:id", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(120), expectedVersion: z.number().int().positive() }).parse(request.body);
+    const body = z.object({ name: z.string().trim().min(1).max(120), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional(), expectedVersion: z.number().int().positive() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.patchTag(identity, request.params.id, body)), writeRequestId(request));
   });
   app.delete<{ Params: { id: string } }>("/api/v1/tags/:id", async (request) => {
@@ -317,11 +367,11 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   });
   app.get("/api/v1/specifications", async (request) => success(taxonomy.specifications(request.query as Record<string, unknown>), request.id));
   app.post("/api/v1/specifications", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(120) }).parse(request.body);
-    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createSpecification(identity, body.name)), writeRequestId(request));
+    const body = z.object({ name: z.string().trim().min(1).max(120), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional() }).parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => taxonomy.createSpecification(identity, body.name, body.description, body.examples)), writeRequestId(request));
   });
   app.patch<{ Params: { id: string } }>("/api/v1/specifications/:id", async (request) => {
-    const body = z.object({ name: z.string().trim().min(1).max(120), expectedVersion: z.number().int().positive() }).parse(request.body);
+    const body = z.object({ name: z.string().trim().min(1).max(120), description: z.string().trim().max(30).optional(), examples: taxonomyExamplesSchema.optional(), expectedVersion: z.number().int().positive() }).parse(request.body);
     return success(await runWrite(request, idempotency, body, (identity) => taxonomy.patchSpecification(identity, request.params.id, body)), writeRequestId(request));
   });
   app.delete<{ Params: { id: string } }>("/api/v1/specifications/:id", async (request) => {

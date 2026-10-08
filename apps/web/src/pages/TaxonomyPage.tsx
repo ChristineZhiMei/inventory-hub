@@ -1,3 +1,4 @@
+import { AI_OPTION_EXAMPLE_LIMIT, AI_OPTION_EXAMPLE_LENGTH, type AiSelectionRules } from "@inventory-hub/contracts";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit3, Plus, Ruler, Search, Shapes, Tag as TagIcon, Trash2 } from "lucide-react";
@@ -20,6 +21,7 @@ import {
   Input,
   Segmented,
   Select,
+  Textarea,
 } from "@/components/AntUi";
 
 type Tab = "categories" | "tags" | "specifications";
@@ -43,6 +45,14 @@ export function TaxonomyPage() {
   const [editing, setEditing] = useState<EditTarget | null>(null);
   const [deleting, setDeleting] = useState<EditTarget | null>(null);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [examplesInput, setExamplesInput] = useState("");
+  const examples = [...new Set(examplesInput.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))];
+  const examplesError = examples.length > AI_OPTION_EXAMPLE_LIMIT
+    ? `最多填写 ${AI_OPTION_EXAMPLE_LIMIT} 条示例`
+    : examples.some((value) => value.length > AI_OPTION_EXAMPLE_LENGTH)
+      ? `每条示例最多 ${AI_OPTION_EXAMPLE_LENGTH} 字`
+      : "";
   const [parentId, setParentId] = useState("");
   const [confirm, setConfirm] = useState("");
   const [reassignTargetId, setReassignTargetId] = useState("");
@@ -83,6 +93,7 @@ export function TaxonomyPage() {
   const save = useMutation({
     mutationFn: () => {
       if (!editing) throw new Error("缺少编辑对象");
+      if (examplesError) throw new Error(examplesError);
       const endpoint =
         editing.kind === "category"
           ? "/categories"
@@ -94,12 +105,16 @@ export function TaxonomyPage() {
           ? editing.item
             ? {
                 name,
+                description,
+                examples,
                 parentId: parentId || null,
                 expectedVersion: editing.item.version,
               }
-            : { name, ...(parentId ? { parentId } : {}) }
+            : { name, description, examples, ...(parentId ? { parentId } : {}) }
           : {
               name,
+              description,
+              examples,
               ...(editing.item
                 ? { expectedVersion: editing.item.version }
                 : {}),
@@ -166,8 +181,11 @@ export function TaxonomyPage() {
     },
   });
   function openEdit(target: EditTarget) {
+    save.reset();
     setEditing(target);
     setName(target.item?.name || "");
+    setDescription(target.item?.description || "");
+    setExamplesInput((target.item?.examples ?? []).join("\n"));
     setParentId(target.kind === "category" ? target.item?.parentId || "" : "");
   }
   const editingExcluded =
@@ -180,7 +198,7 @@ export function TaxonomyPage() {
       : new Set<string>();
   return (
     <div>
-      <div className="page-toolbar">
+      <div className="page-toolbar taxonomy-toolbar">
         <div className="page-toolbar__filters">
           <Segmented
             value={tab}
@@ -219,6 +237,7 @@ export function TaxonomyPage() {
         </Button>
         </div>
       </div>
+      <SelectionRuleEditor tab={tab} />
       {currentQuery.isLoading ? (
         <p>加载中…</p>
       ) : currentQuery.isError ? (
@@ -257,6 +276,8 @@ export function TaxonomyPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{item.name}</p>
+                  {item.description && <p className="mt-1 break-words text-sm text-muted-foreground">{item.description}</p>}
+                  {!!item.examples?.length && <p className="mt-1 break-words text-sm text-muted-foreground">示例：{item.examples.join("、")}</p>}
                   <p className="text-xs text-muted-foreground">
                     直接引用 {item.referenceCount ?? 0} 个档案
                   </p>
@@ -337,7 +358,7 @@ export function TaxonomyPage() {
             </Button>
             <Button
               loading={save.isPending}
-              disabled={!name.trim()}
+              disabled={!name.trim() || !!examplesError}
               onClick={() => save.mutate()}
             >
               保存
@@ -375,6 +396,12 @@ export function TaxonomyPage() {
               </Select>
             </Field>
           )}
+          <Field label={`选项说明（${description.length}/30）`}>
+            <Textarea aria-label="选项说明" value={description} maxLength={30} rows={2} onChange={(event) => setDescription(event.target.value)} placeholder="可选，帮助 AI 理解此选项的含义" />
+          </Field>
+          <Field label={`示例物品（${examples.length}/${AI_OPTION_EXAMPLE_LIMIT} 条）`} error={examplesError || undefined} hint={`可选，每行一条，每条最多 ${AI_OPTION_EXAMPLE_LENGTH} 字。帮助 AI 理解哪些物品适用此选项，空行和重复项会自动忽略。`}>
+            <Textarea aria-label="示例物品" value={examplesInput} rows={4} maxLength={2000} disabled={save.isPending} onChange={(event) => setExamplesInput(event.target.value)} placeholder={"短袖T恤\n短袖连衣裙\n短袖外套"} />
+          </Field>
           {save.error && (
             <Alert title="保存失败" tone="error">
               {errorMessage(save.error)}
@@ -486,4 +513,28 @@ function descendantIds(categoryId: string, all: Category[]) {
   };
   visit(categoryId);
   return found;
+}
+
+function SelectionRuleEditor({ tab }: { tab: Tab }) {
+  const queryClient = useQueryClient();
+  const rules = useQuery({ queryKey: ["ai-selection-rules"], queryFn: () => api<AiSelectionRules>("/ai/selection-rules") });
+  return <Card className="mb-5"><CardHeader><CardTitle>{kindLabel(tab)}选择说明</CardTitle></CardHeader><CardContent>
+    {rules.isError ? <QueryError error={rules.error} onRetry={() => rules.refetch()} /> : rules.data ?
+      <SelectionRuleForm key={`${tab}:${rules.data.version}`} tab={tab} rules={rules.data} onSaved={(value) => queryClient.setQueryData(["ai-selection-rules"], value)} /> : <p>正在加载说明…</p>}
+  </CardContent></Card>;
+}
+
+function SelectionRuleForm({ tab, rules, onSaved }: { tab: Tab; rules: AiSelectionRules; onSaved: (value: AiSelectionRules) => void }) {
+  const [value, setValue] = useState(rules[tab]);
+  const save = useMutation({
+    mutationFn: () => api<AiSelectionRules>("/ai/selection-rules", { method: "PUT", body: { categories: rules.categories, specifications: rules.specifications, tags: rules.tags, [tab]: value, expectedVersion: rules.version } }),
+    onSuccess: onSaved,
+  });
+  return <div className="space-y-3">
+    <Field label={`AI 如何选择${kindLabel(tab)}（${value.length}/300）`}>
+      <Textarea aria-label={`${kindLabel(tab)}选择说明`} maxLength={300} rows={3} value={value} disabled={save.isPending} onChange={(event) => setValue(event.target.value)} placeholder={`可选，填写选择${kindLabel(tab)}的原则，留空使用默认规则`} />
+    </Field>
+    <Button variant="outline" loading={save.isPending} disabled={value === rules[tab]} onClick={() => save.mutate()}>保存选择说明</Button>
+    {save.error && <Alert title="说明保存失败" tone="error">{errorMessage(save.error)}</Alert>}
+  </div>;
 }

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 7;
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -16,16 +16,19 @@ CREATE INDEX IF NOT EXISTS sessions_user_expiry ON sessions(user_id, expires_at)
 CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY, parent_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
   name TEXT NOT NULL, normalized_name TEXT NOT NULL, parent_scope_key TEXT NOT NULL,
+  examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(examples) AND json_type(examples)='array' AND json_array_length(examples)<=10),
   version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
   UNIQUE(parent_scope_key, normalized_name)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS categories_parent ON categories(parent_id, id);
 CREATE TABLE IF NOT EXISTS tags (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE,
+  examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(examples) AND json_type(examples)='array' AND json_array_length(examples)<=10),
   version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 ) STRICT;
 CREATE TABLE IF NOT EXISTS specifications (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE,
+  examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(examples) AND json_type(examples)='array' AND json_array_length(examples)<=10),
   version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 ) STRICT;
 
@@ -185,6 +188,21 @@ CREATE TABLE IF NOT EXISTS print_attempts (
   os_job_id TEXT, started_at INTEGER NOT NULL, finished_at INTEGER, error TEXT,
   UNIQUE(item_id, attempt_no)
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS ai_settings (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),
+  model TEXT NOT NULL DEFAULT 'glm-4.6v-flash', api_key_encrypted TEXT NOT NULL DEFAULT '',
+  name_prompt TEXT NOT NULL DEFAULT '' CHECK(length(name_prompt)<=300),
+  version INTEGER NOT NULL DEFAULT 1
+) STRICT;
+INSERT OR IGNORE INTO ai_settings(singleton_id) VALUES(1);
+CREATE TABLE IF NOT EXISTS ai_selection_rules (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),
+  categories TEXT NOT NULL DEFAULT '' CHECK(length(categories)<=300),
+  specifications TEXT NOT NULL DEFAULT '' CHECK(length(specifications)<=300),
+  tags TEXT NOT NULL DEFAULT '' CHECK(length(tags)<=300), version INTEGER NOT NULL DEFAULT 1
+) STRICT;
+INSERT OR IGNORE INTO ai_selection_rules(singleton_id) VALUES(1);
 
 CREATE TABLE IF NOT EXISTS system_settings (
   singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1), staging_node_id TEXT NOT NULL,

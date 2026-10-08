@@ -193,6 +193,27 @@ export class MediaService {
     }
   }
 
+  /** Read a ready, user-owned upload without attaching it to an item. */
+  async readRecognitionUpload(userId: string, uploadId: string): Promise<Buffer> {
+    this.assertMediaWritable();
+    const row = this.getUpload(userId, uploadId);
+    invariant(row.state === "READY" && row.expiresAt > Date.now(), "INVALID_STATE", "图片尚未就绪或已过期，请重新上传");
+    const root = this.database.activeRoot;
+    invariant(row.rootId === root.id && root.state === "ONLINE", "STORAGE_OFFLINE", "图片目录当前不可用");
+    const manifest = JSON.parse(row.manifest) as UploadManifest;
+    invariant(manifest.stagingMainKey, "MEDIA_MISSING", "图片文件缺失");
+    try {
+      const [realRoot, realFile] = await Promise.all([
+        realpath(root.absolutePath), realpath(this.safePath(root.absolutePath, manifest.stagingMainKey)),
+      ]);
+      invariant(realFile.startsWith(`${realRoot}${sep}`), "DATA_INTEGRITY_ERROR", "图片路径越过授权目录");
+      return await readFile(realFile);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("MEDIA_MISSING", "图片文件缺失，请重新上传");
+    }
+  }
+
   queueImageCleanup(imageRows: Array<{ mainKey: string; thumbKey: string }>, kind = "IMAGE_DELETE"): string | null {
     return this.queuePathsCleanup(imageRows.flatMap((row) => [row.mainKey, row.thumbKey]), kind);
   }
