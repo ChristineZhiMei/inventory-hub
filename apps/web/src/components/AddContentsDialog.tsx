@@ -1,3 +1,4 @@
+import { useRecentSelections } from "@/lib/recentSelections";
 import {
   useDeferredValue,
   useEffect,
@@ -26,6 +27,7 @@ export function AddContentsDialog({
   onClose: () => void;
 }) {
   const [queryText, setQueryText] = useState("");
+  const recent = useRecentSelections();
   const [categoryId, setCategoryId] = useState("");
   const [tagId, setTagId] = useState("");
   const [locationId, setLocationId] = useState("");
@@ -138,21 +140,21 @@ export function AddContentsDialog({
             )}
             <Select
               value={categoryId}
-              onChange={(event) => { setCategoryId(event.target.value); resetPage(); }}
+              onChange={(event) => { recent.record("category", [event.target.value]); setCategoryId(event.target.value); resetPage(); }}
               aria-label="按分类筛选"
             >
               <option value="">全部分类</option>
-              {pageItems(categories.data).map((category) => (
+              {recent.sort("category", pageItems(categories.data)).map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </Select>
             <Select
               value={tagId}
-              onChange={(event) => { setTagId(event.target.value); resetPage(); }}
+              onChange={(event) => { recent.record("tag", [event.target.value]); setTagId(event.target.value); resetPage(); }}
               aria-label="按标签筛选"
             >
               <option value="">全部标签</option>
-              {pageItems(tags.data).map((tag) => (
+              {recent.sort("tag", pageItems(tags.data)).map((tag) => (
                 <option key={tag.id} value={tag.id}>{tag.name}</option>
               ))}
             </Select>

@@ -1,3 +1,4 @@
+import { useRecentSelections } from "@/lib/recentSelections";
 import { useEffect, useMemo, useState } from "react";
 import { Dropdown } from "antd";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
   const mobile = useMediaQuery("(max-width: 767px)");
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const recent = useRecentSelections();
   const [filter, setFilter] = useState<LocationFilter>(forcedType || "ALL");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -99,6 +101,9 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
     setSelected([]);
   }
   function setFilterParam(name: string, value: string) {
+    if (name === "categoryId") recent.record("category", [value]);
+    if (name === "tagIds") recent.record("tag", [value]);
+    if (name === "specificationIds") recent.record("specification", [value]);
     const next = new URLSearchParams(params);
     if (value) next.set(name, value);
     else next.delete(name);
@@ -109,8 +114,8 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
   const categories = useQuery({ queryKey: ["categories"], queryFn: queries.categories });
   const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
   const specifications = useQuery({
-    queryKey: ["specifications", "location-filter"],
-    queryFn: () => queries.specifications("limit=100"),
+    queryKey: ["specifications", "location-filter", recent.ids("specification").join(",")],
+    queryFn: () => queries.specifications(new URLSearchParams({ limit: "100", recentIds: recent.ids("specification").join(",") }).toString()),
   });
   const parentLocations = useQuery({
     queryKey: ["locations", "location-filter"],
@@ -139,15 +144,15 @@ export function LocationsPage({ forcedType, staging = false }: { forcedType?: Ex
       </Select>
       <Select value={params.get("categoryId") || ""} onChange={(event) => setFilterParam("categoryId", event.target.value)} aria-label="分类">
         <option value="">全部分类</option>
-        {pageItems(categories.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+        {recent.sort("category", pageItems(categories.data)).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </Select>
       <Select value={params.get("tagIds") || ""} onChange={(event) => setFilterParam("tagIds", event.target.value)} aria-label="标签">
         <option value="">全部标签</option>
-        {pageItems(tags.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+        {recent.sort("tag", pageItems(tags.data)).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </Select>
       <Select value={params.get("specificationIds") || ""} onChange={(event) => setFilterParam("specificationIds", event.target.value)} aria-label="规格">
         <option value="">全部规格</option>
-        {pageItems(specifications.data).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+        {recent.sort("specification", pageItems(specifications.data)).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </Select>
       <Select value={params.get("locationId") || ""} onChange={(event) => setFilterParam("locationId", event.target.value)} aria-label="所在位置">
         <option value="">全部位置</option>

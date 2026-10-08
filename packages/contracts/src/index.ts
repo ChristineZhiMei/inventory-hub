@@ -94,9 +94,6 @@ export const CreateNodeSchema = z.object({
   if (value.type === "ITEM" && value.categoryIds.length === 0 && !value.categoryId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["categoryIds"], message: "物品必须至少选择一个分类" });
   }
-  if (value.type === "ITEM" && value.uploadIds.length === 0) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["uploadIds"], message: "物品至少需要一张图片" });
-  }
   if (value.type === "WAREHOUSE" && (value.createMode !== "STAGE" || value.targetId)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["createMode"], message: "仓库必须创建为根节点" });
   }

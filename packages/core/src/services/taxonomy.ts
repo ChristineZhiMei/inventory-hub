@@ -151,9 +151,14 @@ export class TaxonomyService {
     invariant(search.length <= 120, "VALIDATION_ERROR", "规格搜索内容最多 120 个字符");
     const where = search ? "WHERE s.name LIKE ? ESCAPE '\\'" : "";
     const params = search ? [`%${escapeLike(search)}%`] : [];
+    const recentIds = [...new Set(String(query.recentIds ?? "").split(",").filter(Boolean))].slice(0, 100);
+    invariant(recentIds.every((id) => SYSTEM_ID_PATTERN.test(id)), "VALIDATION_ERROR", "最近选择的规格标识无效");
+    const recentOrder = recentIds.length
+      ? `CASE s.id ${recentIds.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${recentIds.length} END,`
+      : "";
     const rows = this.database.db.prepare(`SELECT s.id,s.name,s.version,s.created_at createdAt,s.updated_at updatedAt,
       (SELECT count(*) FROM node_specifications ns WHERE ns.specification_id=s.id) referenceCount
-      FROM specifications s ${where} ORDER BY s.name,s.id LIMIT ? OFFSET ?`).all(...params, limit + 1, offset) as any[];
+      FROM specifications s ${where} ORDER BY ${recentOrder} s.name,s.id LIMIT ? OFFSET ?`).all(...params, ...recentIds, limit + 1, offset) as any[];
     const items = rows.slice(0, limit).map((row) => ({
       ...row,
       referenceToken: this.specificationReferenceToken(row.id),

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { QRCode } from "antd";
+import { Checkbox, QRCode } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CircleUserRound,
@@ -29,6 +29,7 @@ import {
   rememberPrintPreferences,
   type NativePrintSettings,
 } from "@/lib/localPrinting";
+import { copyFields, readCopyDefaults, saveCopyDefaults, type CopyField } from "@/lib/nodeCopy";
 import { queries } from "@/lib/queries";
 import {
   playScanSuccessSound,
@@ -61,6 +62,7 @@ const pages = [
   { id: "storage", label: "图片存储", icon: HardDrive },
   { id: "lan", label: "局域网访问", icon: Network },
   { id: "devices", label: "设备与打印", icon: Printer },
+  { id: "copy", label: "复制偏好", icon: Copy },
   { id: "about", label: "关于与健康", icon: Info },
 ] as const;
 
@@ -107,6 +109,8 @@ export function SettingsPage() {
             <LanSettings />
           ) : section === "devices" ? (
             <DeviceSettings />
+          ) : section === "copy" ? (
+            <CopySettings />
           ) : (
             <AboutSettings />
           )}
@@ -114,6 +118,25 @@ export function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function CopySettings() {
+  const [selected, setSelected] = useState<CopyField[]>(readCopyDefaults);
+  const [error, setError] = useState("");
+  return <Card><CardHeader><CardTitle>复制默认勾选项</CardTitle></CardHeader><CardContent>
+    <p className="mb-5 text-sm text-muted-foreground">每次打开复制弹窗时自动勾选以下基本信息，仍可在弹窗中调整。选择后自动保存，仅影响当前设备。</p>
+    <Checkbox.Group value={selected} onChange={(values) => {
+      try {
+        saveCopyDefaults(values as CopyField[]);
+        setSelected(values as CopyField[]);
+        setError("");
+      } catch { setError("当前浏览器无法保存偏好，请检查存储设置后重试"); }
+    }} className="grid grid-cols-2 gap-4">
+      {copyFields.map((field) => <Checkbox key={field.value} value={field.value}>{field.label}</Checkbox>)}
+    </Checkbox.Group>
+    <p className="mt-5 text-sm text-muted-foreground">复制不包含下级物品或容器；仓库不复制存放位置。分类、规格和标签的选择列表会优先显示本设备最近选择过的选项。</p>
+    {error && <Alert title="保存失败" tone="error" className="mt-4">{error}</Alert>}
+  </CardContent></Card>;
 }
 
 function AccountSettings() {

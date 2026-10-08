@@ -6,6 +6,8 @@ import { Controller, useForm } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
+import { useRecentSelections } from "@/lib/recentSelections";
+import type { NodePrefill } from "@/lib/nodeCopy";
 import { useMediaQuery } from "@/lib/media";
 import { pageItems, queries } from "@/lib/queries";
 import { useSelectPopupScrollGuard } from "@/lib/scrollLock";
@@ -40,16 +42,7 @@ export function NodeForm({
 }: {
   type: NodeType;
   initial?: InventoryNode;
-  prefill?: Pick<
-    InventoryNode,
-    | "name"
-    | "categories"
-    | "categoryId"
-    | "category"
-    | "specifications"
-    | "specification"
-    | "tags"
-  >;
+  prefill?: NodePrefill;
   defaultTargetId?: string;
   submitLabel?: string;
   onSubmit: (
@@ -58,14 +51,16 @@ export function NodeForm({
   busy?: boolean;
 }) {
   const [images, setImages] = useState<EditableImage[]>(() =>
-    (initial?.images || []).map((image) => ({
-      key: image.id,
-      imageId: image.id,
+    (initial?.images || prefill?.images || []).map((image) => ({
+      key: initial ? image.id : crypto.randomUUID(),
+      ...(initial ? { imageId: image.id } : { sourceImageId: image.id }),
       preview: image.url || `/api/v1/images/${image.id}?variant=main`,
       state: "existing",
     })),
   );
   const queryClient = useQueryClient();
+  const recent = useRecentSelections();
+  const recentSpecifications = recent.ids("specification").join(",");
   const [retainedTags, setRetainedTags] = useState<Tag[]>([]);
   const [retainedSpecifications, setRetainedSpecifications] = useState<Specification[]>([]);
   const [specificationSearchInput, setSpecificationSearchInput] = useState("");
@@ -81,9 +76,10 @@ export function NodeForm({
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: queries.tags });
   const specifications = useInfiniteQuery({
-    queryKey: ["specifications", "options", specificationSearch],
+    queryKey: ["specifications", "options", specificationSearch, recentSpecifications],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: "30" });
+      if (recentSpecifications) params.set("recentIds", recentSpecifications);
       if (specificationSearch) params.set("q", specificationSearch);
       if (pageParam) params.set("cursor", String(pageParam));
       return queries.specifications(params.toString());
@@ -100,6 +96,11 @@ export function NodeForm({
     searchParams.get("targetId") ||
     inheritedTargetId ||
     "";
+  const defaultLocation = useQuery({
+    queryKey: ["node", defaultTargetId],
+    queryFn: () => queries.node(defaultTargetId),
+    enabled: !initial && type !== "WAREHOUSE" && !!defaultTargetId,
+  });
   const form = useForm<NodeFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -116,7 +117,7 @@ export function NodeForm({
         initial?.specifications?.map((item) => item.id) ||
         prefill?.specifications?.map((item) => item.id) ||
         [],
-      notes: initial?.notes || "",
+      notes: initial?.notes || prefill?.notes || "",
       targetId: defaultTargetId,
       createMode: defaultTargetId ? "PLACE" : "STAGE",
       nextCreateType: "NONE",
@@ -157,7 +158,8 @@ export function NodeForm({
   );
   const allowedLocations = useMemo(
     () =>
-      pageItems(locations.data).filter((node) => {
+      mergeTaxonomyOptions(pageItems(locations.data), defaultLocation.data ? [defaultLocation.data] : []).filter((node) => {
+        if (node.isSystemStaging) return false;
         if (node.stockStatus && node.stockStatus !== "IN_STOCK") return false;
         if (type === "BOX") return node.type === "WAREHOUSE";
         if (type === "BAG")
@@ -168,7 +170,7 @@ export function NodeForm({
           node.type === "BAG"
         );
       }),
-    [locations.data, type],
+    [locations.data, defaultLocation.data, type],
   );
   useEffect(() => {
     if (createMode === "STAGE") form.setValue("targetId", "");
@@ -229,6 +231,7 @@ export function NodeForm({
         }
       }
       const uniqueIds = [...new Set(selectedIds)];
+      recent.record(kind, uniqueIds, [...previouslySelectedIds]);
       if (kind === "tag") {
         form.setValue("tagIds", uniqueIds, {
           shouldDirty: true,
@@ -267,10 +270,6 @@ export function NodeForm({
     const usableImages = images.filter(
       (image) => image.state === "existing" || image.state === "ready",
     );
-    if (type === "ITEM" && usableImages.length === 0) {
-      form.setError("root", { message: "物品至少需要一张已处理完成的图片" });
-      return;
-    }
     if (
       images.some(
         (image) => image.state === "uploading" || image.state === "processing",
@@ -295,6 +294,10 @@ export function NodeForm({
     const selectedLocation = allowedLocations.find(
       (location) => location.id === values.targetId,
     );
+    if (!initial && values.createMode === "PLACE" && type !== "WAREHOUSE" && !selectedLocation) {
+      form.setError("targetId", { message: "所选位置已不可用，请重新选择" });
+      return;
+    }
     try {
       await onSubmit({
         ...values,
@@ -359,7 +362,7 @@ export function NodeForm({
               aria-label="分类"
               mode="multiple"
               value={form.watch("categoryIds")}
-              options={categoryOptions.map((category) => ({
+              options={recent.sort("category", categoryOptions).map((category) => ({
                 value: category.id,
                 label: category.name,
               }))}
@@ -371,12 +374,13 @@ export function NodeForm({
               maxTagCount={mobile ? 1 : "responsive"}
               virtual={!mobile}
               onOpenChange={setTaxonomyPopupOpen}
-              onChange={(values) =>
+              onChange={(values) => {
+                recent.record("category", values, form.getValues("categoryIds"));
                 form.setValue("categoryIds", values, {
                   shouldDirty: true,
                   shouldValidate: true,
-                })
-              }
+                });
+              }}
               allowClear
             />
           </Field>
@@ -389,7 +393,7 @@ export function NodeForm({
                 aria-label="规格"
                 mode="tags"
                 value={selectedSpecifications}
-                options={specificationOptions.map((item) => ({ value: item.id, label: item.name }))}
+                options={recent.sort("specification", specificationOptions).map((item) => ({ value: item.id, label: item.name }))}
                 placeholder="搜索或创建规格"
                 size="large"
                 className="w-full"
@@ -428,7 +432,7 @@ export function NodeForm({
               aria-label="标签"
               mode="tags"
               value={selectedTags}
-              options={tagOptions.map((item) => ({ value: item.id, label: item.name }))}
+              options={recent.sort("tag", tagOptions).map((item) => ({ value: item.id, label: item.name }))}
               placeholder="选择或创建标签"
               size="large"
               className="w-full"
@@ -464,11 +468,10 @@ export function NodeForm({
         </div>
       </section>
       <section className="surface p-5">
-        <h2 className="mb-5 font-semibold">图片（最多 5 张）</h2>
+        <h2 className="mb-5 font-semibold">图片（选填，最多 5 张）</h2>
         <ImageManager
           value={images}
           onChange={setImages}
-          required={type === "ITEM"}
           disabled={busy}
         />
       </section>

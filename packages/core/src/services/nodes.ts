@@ -512,7 +512,6 @@ export class NodeService {
 
   private replaceImages(node: any, entries: NonNullable<PatchProfileInput["images"]>, prepared: PreparedImage[]): void {
     invariant(entries.length <= 5, "IMAGE_LIMIT", "每个档案最多五张图片");
-    invariant(node.type !== "ITEM" || entries.length >= 1, "IMAGE_REQUIRED", "物品至少需要一张图片");
     const existingIds = entries.flatMap((entry) => "imageId" in entry ? [entry.imageId] : []);
     if (existingIds.length) {
       const placeholders = existingIds.map(() => "?").join(",");

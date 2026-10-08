@@ -5,6 +5,7 @@ import {
   Archive,
   Box,
   ChevronRight,
+  Copy,
   Edit3,
   History,
   ImageOff,
@@ -28,6 +29,7 @@ import type {
   PrintExecutor,
 } from "@/lib/types";
 import { formatDate, formatOperationSummary } from "@/lib/utils";
+import { CopyNodeDialog } from "@/components/CopyNodeDialog";
 import { CodeLabel } from "@/components/CodeLabel";
 import { AddContentsDialog } from "@/components/AddContentsDialog";
 import { InventoryActionDialog } from "@/components/InventoryActionDialog";
@@ -61,6 +63,7 @@ export function NodeDetailPage() {
   const queryClient = useQueryClient();
   const contentView = searchParams.get("view") === "list" ? "list" : "card";
   const [action, setAction] = useState<InventoryAction | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [executorId, setExecutorId] = useState("");
@@ -293,6 +296,7 @@ export function NodeDetailPage() {
                 {createChildButton}
               </>
             )}
+            {!node.isSystemStaging && <Button variant="outline" onClick={() => setCopyOpen(true)}><Copy className="size-4" />复制</Button>}
             <Link
               to={`/archives/${node.id}/edit`}
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border bg-card px-4 text-sm font-medium hover:bg-muted md:min-h-8"
@@ -689,6 +693,7 @@ export function NodeDetailPage() {
           )}
         </aside>
       </div>
+      {copyOpen && <CopyNodeDialog key={node.id} node={node} onClose={() => setCopyOpen(false)} />}
       <InventoryActionDialog
         open={!!action}
         action={action || "MOVE"}

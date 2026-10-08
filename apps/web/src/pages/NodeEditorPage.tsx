@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "@/lib/api";
+import { copyImageToUpload, copyPrefill, parseCopyFields } from "@/lib/nodeCopy";
 import { queries } from "@/lib/queries";
 import type { NodeType } from "@/lib/types";
 import { NodeForm, type NodeFormData } from "@/components/NodeForm";
@@ -24,12 +26,21 @@ export function NodeEditorPage({
     queryFn: () => queries.node(id!),
     enabled: mode === "edit" && !!id,
   });
+  const copyFrom = mode === "create" ? params.get("copyFrom") : null;
+  const copyFields = parseCopyFields((params.get("fields") ?? "").split(","));
+  const copySource = useQuery({
+    queryKey: ["node", copyFrom],
+    queryFn: () => queries.node(copyFrom!),
+    enabled: !!copyFrom,
+  });
+  const copiedUploads = useRef(new Map<string, Promise<string>>());
   const type =
+    copySource.data?.type ||
     forcedType ||
     (params.get("type") as NodeType | null) ||
     detail.data?.type ||
     "ITEM";
-  const sourceItemId = mode === "create" && type !== "ITEM"
+  const sourceItemId = mode === "create" && !copyFrom && type !== "ITEM"
     ? params.get("sourceItemId")
     : null;
   const sourceItem = useQuery({
@@ -42,7 +53,21 @@ export function NodeEditorPage({
     : undefined;
   const mutation = useMutation({
     mutationFn: async (values: NodeFormData & { images: EditableImage[] }) => {
-      if (mode === "create")
+      if (mode === "create") {
+        const uploadIds: string[] = [];
+        for (const image of values.images) {
+          if (image.sourceImageId) {
+            let upload = copiedUploads.current.get(image.key);
+            if (!upload) {
+              upload = copyImageToUpload(image.sourceImageId, image.key).catch((error) => {
+                copiedUploads.current.delete(image.key);
+                throw error;
+              });
+              copiedUploads.current.set(image.key, upload);
+            }
+            uploadIds.push(await upload);
+          } else if (image.uploadId) uploadIds.push(image.uploadId);
+        }
         return api<{ id?: string; node?: { id: string } }>("/nodes", {
           method: "POST",
           idempotent: true,
@@ -53,9 +78,7 @@ export function NodeEditorPage({
             categoryIds: values.categoryIds,
             specificationIds: values.specificationIds,
             tagIds: values.tagIds,
-            uploadIds: values.images
-              .map((image) => image.uploadId)
-              .filter(Boolean),
+            uploadIds,
             createMode: type === "WAREHOUSE" ? "STAGE" : values.createMode,
             targetId:
               values.createMode === "PLACE" ? values.targetId : undefined,
@@ -73,6 +96,7 @@ export function NodeEditorPage({
               : undefined,
           },
         });
+      }
       return api<{ id?: string; node?: { id: string } }>(`/nodes/${id}`, {
         method: "PATCH",
         idempotent: true,
@@ -118,6 +142,13 @@ export function NodeEditorPage({
     BOX: "箱子",
     WAREHOUSE: "仓库",
   }[type];
+  if (copyFrom && copySource.isError) return <><PageHeader title="复制档案" back /><QueryError error={copySource.error} onRetry={() => copySource.refetch()} /></>;
+  if (copyFrom && !copySource.data) return <><PageHeader title="加载复制来源…" back /><Skeleton className="h-96" /></>;
+  if (copySource.data?.isSystemStaging) return <Alert title="系统暂存区不能复制" tone="error" />;
+  const copiedParent = copySource.data?.path?.[1];
+  const copyTargetId = copyFields.includes("location") && type !== "WAREHOUSE" && !copiedParent?.isSystemStaging
+    ? copySource.data?.parentId ?? undefined
+    : undefined;
   if (mode === "edit" && detail.isError)
     return (
       <>
@@ -149,7 +180,7 @@ export function NodeEditorPage({
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        title={mode === "create" ? `新建${typeName}` : `编辑${typeName}`}
+        title={mode === "create" ? `${copyFrom ? "复制" : "新建"}${typeName}` : `编辑${typeName}`}
         description={
           mode === "create"
             ? "保存后系统会分配唯一编号；编号不会因改名或移动而改变。"
@@ -162,17 +193,20 @@ export function NodeEditorPage({
           {errorMessage(mutation.error)}
         </Alert>
       )}
+      {copySource.data && <Alert title={`复制自 ${copySource.data.name}`} tone="info" className="mb-4">仅预填所选基本信息，保存后生成新编号，不包含下级内容。未勾选的必填信息需补齐。</Alert>}
       {sourceItem.data && (
         <Alert title="创建后自动装入" tone="info" className="mb-4">
           创建{typeName}成功后，{sourceItem.data.name}（{sourceItem.data.code}）会自动移动到该{typeName}中。
         </Alert>
       )}
       <NodeForm
-        key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}:${sourceItem.data?.version || "empty"}`}
+        key={mode === "edit" ? `${id}:${detail.data?.version}` : `create:${type}:${copyFrom || sourceItemId || "empty"}:${params.get("fields") || ""}`}
         type={type}
         initial={detail.data}
-        prefill={sourceItem.data}
-        defaultTargetId={inheritedTargetId}
+        prefill={copySource.data
+          ? copyPrefill(copySource.data, copyFields)
+          : sourceItem.data ? copyPrefill(sourceItem.data, ["name", "categories", "specifications", "tags"]) : undefined}
+        defaultTargetId={copyFrom ? copyTargetId : inheritedTargetId}
         onSubmit={(payload) =>
           mutation.mutateAsync(payload).then(() => undefined)
         }

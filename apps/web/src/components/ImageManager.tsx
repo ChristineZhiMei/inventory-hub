@@ -18,6 +18,7 @@ type UploadStage = "converting" | "registering" | "uploading" | "processing";
 export type EditableImage = {
   key: string;
   imageId?: string;
+  sourceImageId?: string;
   uploadId?: string;
   preview: string;
   state: "existing" | "uploading" | "processing" | "ready" | "failed";
@@ -45,12 +46,10 @@ const inferredMimeTypes: Record<string, string> = {
 export function ImageManager({
   value: items,
   onChange,
-  required = false,
   disabled = false,
 }: {
   value: EditableImage[];
   onChange: Dispatch<SetStateAction<EditableImage[]>>;
-  required?: boolean;
   disabled?: boolean;
 }) {
   const [selectionError, setSelectionError] = useState("");
@@ -312,7 +311,6 @@ export function ImageManager({
       <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
         <Camera className="mt-0.5 size-4 shrink-0" />
         <span>
-          {required && completedItems.length === 0 ? "至少添加 1 张 · " : ""}
           已上传 {completedItems.length}/5
           {activeItems.length > 0 ? `，处理中 ${activeItems.length} 张` : ""}
           {failedItems.length > 0 ? `，失败 ${failedItems.length} 张` : ""}

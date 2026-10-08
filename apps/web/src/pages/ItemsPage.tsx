@@ -1,3 +1,4 @@
+import { useRecentSelections } from "@/lib/recentSelections";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -27,6 +28,7 @@ import { useBodyScrollLock } from "@/lib/scrollLock";
 
 export function ItemsPage() {
   const [params, setParams] = useSearchParams();
+  const recent = useRecentSelections();
   const [selected, setSelected] = useState<InventoryNode[]>([]);
   const [action, setAction] = useState<InventoryAction | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -53,6 +55,9 @@ export function ItemsPage() {
   });
   const items = pageItems(query.data);
   function setFilter(name: string, value: string) {
+    if (name === "categoryId") recent.record("category", [value]);
+    if (name === "tagIds") recent.record("tag", [value]);
+    if (name === "specificationIds") recent.record("specification", [value]);
     const next = new URLSearchParams(params);
     if (value) next.set(name, value);
     else next.delete(name);
@@ -112,7 +117,7 @@ export function ItemsPage() {
         aria-label="分类"
       >
         <option value="">全部分类</option>
-        {pageItems(categories.data).map((category) => (
+        {recent.sort("category", pageItems(categories.data)).map((category) => (
           <option value={category.id} key={category.id}>
             {category.name}
           </option>
@@ -125,7 +130,7 @@ export function ItemsPage() {
         aria-label="标签"
       >
         <option value="">全部标签</option>
-        {pageItems(tags.data).map((tag) => (
+        {recent.sort("tag", pageItems(tags.data)).map((tag) => (
           <option value={tag.id} key={tag.id}>
             {tag.name}
           </option>
