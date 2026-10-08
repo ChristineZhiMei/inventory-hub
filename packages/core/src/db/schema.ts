@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -12,6 +12,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   last_seen_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER
 ) STRICT;
 CREATE INDEX IF NOT EXISTS sessions_user_expiry ON sessions(user_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS matching_groups (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  config TEXT NOT NULL CHECK(json_valid(config)),
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS matching_groups_user ON matching_groups(user_id, created_at, id);
 
 CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY, parent_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,

@@ -1,4 +1,5 @@
 export * from "./ai.js";
+export * from "./matching.js";
 import { ITEM_CATEGORY_LIMIT } from "./ai.js";
 import { z } from "zod";
 export * from "./label.js";

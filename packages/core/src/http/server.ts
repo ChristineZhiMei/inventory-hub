@@ -11,6 +11,9 @@ import {
   AI_OPTION_EXAMPLE_LIMIT,
   AI_OPTION_EXAMPLE_LENGTH,
   CreateNodeSchema,
+  MatchingActionSchema,
+  MatchingGroupConfigSchema,
+  MatchingGroupUpdateSchema,
   DeleteNodeSchema,
   OperationInputSchema,
   PatchProfileSchema,
@@ -27,6 +30,7 @@ import { AuthService } from "../services/auth.js";
 import { IdempotencyService, type RequestIdentity } from "../services/idempotency.js";
 import { InventoryService } from "../services/inventory.js";
 import { MediaService } from "../services/media.js";
+import { MatchingService } from "../services/matching.js";
 import { NodeService } from "../services/nodes.js";
 import { PrintService } from "../services/print.js";
 import { TaxonomyService } from "../services/taxonomy.js";
@@ -69,6 +73,7 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
   const idempotency = new IdempotencyService(database);
   const media = new MediaService(database);
   const nodes = new NodeService(database, idempotency, media);
+  const matching = new MatchingService(database, idempotency, nodes);
   const inventory = new InventoryService(database, idempotency);
   const taxonomy = new TaxonomyService(database, idempotency);
   const ai = new AiService(database, media);
@@ -217,6 +222,24 @@ export const createInventoryServer = (configInput: InventoryConfigInput = {}): I
     return success({ changed: database.dataRevision > sinceRevision, dataRevision: database.dataRevision }, request.id);
   });
   app.get("/api/v1/dashboard", async (request) => success(nodes.dashboard(), request.id));
+  app.get("/api/v1/matching-groups", async (request) => success(matching.list(requestAuth(request).userId), request.id));
+  app.post("/api/v1/matching-groups", async (request) => {
+    const body = MatchingGroupConfigSchema.parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => matching.create(identity, body)), writeRequestId(request));
+  });
+  app.get<{ Params: { id: string } }>("/api/v1/matching-groups/:id", async (request) => success(matching.detail(requestAuth(request).userId, request.params.id), request.id));
+  app.put<{ Params: { id: string } }>("/api/v1/matching-groups/:id", async (request) => {
+    const body = MatchingGroupUpdateSchema.parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => matching.update(identity, request.params.id, body.expectedVersion, body.config)), writeRequestId(request));
+  });
+  app.post<{ Params: { id: string } }>("/api/v1/matching-groups/:id/actions", async (request) => {
+    const body = MatchingActionSchema.parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => matching.act(identity, request.params.id, body.expectedVersion, body.action, body.slotId)), writeRequestId(request));
+  });
+  app.delete<{ Params: { id: string } }>("/api/v1/matching-groups/:id", async (request) => {
+    const body = z.object({ expectedVersion: z.number().int().positive() }).strict().parse(request.body);
+    return success(await runWrite(request, idempotency, body, (identity) => matching.delete(identity, request.params.id, body.expectedVersion)), writeRequestId(request));
+  });
   app.get("/api/v1/items", async (request) => {
     const result = nodes.listItems(request.query as any);
     return success(result, request.id, result.nextCursor);

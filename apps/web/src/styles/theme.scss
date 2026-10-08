@@ -1027,3 +1027,102 @@ textarea {
     animation-iteration-count: 1 !important;
   }
 }
+
+.matching-list {
+  display: grid;
+  gap: 16px;
+}
+
+.matching-row {
+  height: 376px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 64px 224px 26px 60px;
+  overflow: hidden;
+
+  &--locked { border-color: hsl(var(--primary) / 0.4); }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    min-width: 0;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  &__body {
+    display: flex;
+    gap: 20px;
+    padding: 16px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__image {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background: hsl(var(--muted));
+
+    img { width: 100%; height: 100%; object-fit: contain; }
+  }
+
+  &__body--large &__image { width: min(38%, 260px); height: 192px; }
+  &__body--detail &__image { width: 88px; height: 88px; }
+
+  &__details { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; }
+  &__body--large &__details { overflow: hidden; }
+
+  &__taxonomy {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+
+    > div { display: flex; gap: 8px; }
+    dt { flex-shrink: 0; color: hsl(var(--muted-foreground)); }
+    dd { min-width: 0; overflow-wrap: anywhere; }
+  }
+
+  &__body--large &__taxonomy {
+    gap: 2px;
+    dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
+
+  &__notes {
+    padding: 0 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+  }
+}
+
+.matching-config-tabs .ant-tabs-nav { margin-bottom: 8px; }
+
+@media (max-width: 767px) {
+  .matching-row {
+    &__header { padding: 10px 12px; gap: 4px; }
+    &__body { padding: 12px; gap: 12px; }
+    &__body--large &__image { width: 40%; height: 200px; }
+    &__body--detail &__image { width: 64px; height: 64px; }
+    &__actions { padding: 10px 12px; }
+    &__notes { padding: 0 12px; }
+  }
+}

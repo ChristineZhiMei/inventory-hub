@@ -16,6 +16,7 @@ import {
   TagsOutlined,
   UserOutlined,
   DownloadOutlined,
+  SkinOutlined,
 } from "@ant-design/icons";
 import { Menu, Switch } from "antd";
 import { Popup, TabBar } from "antd-mobile";
@@ -37,6 +38,7 @@ const primary = [
 ];
 
 const management = [
+  { to: "/matching", label: "搭配", icon: <SkinOutlined /> },
   { to: "/operations", label: "操作记录", icon: <HistoryOutlined /> },
   { to: "/print-jobs", label: "打印队列", icon: <PrinterOutlined /> },
   { to: "/taxonomy", label: "分类与标签", icon: <TagsOutlined /> },
