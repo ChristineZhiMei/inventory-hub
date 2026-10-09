@@ -1114,7 +1114,10 @@ textarea {
   }
 }
 
-.matching-config-tabs .ant-tabs-nav { margin-bottom: 8px; }
+.matching-config-options {
+  margin-bottom: 8px;
+  .ant-segmented-item-label { padding-inline: 8px; }
+}
 
 @media (max-width: 767px) {
   .matching-row {

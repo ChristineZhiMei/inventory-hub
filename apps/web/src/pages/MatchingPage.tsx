@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tabs, Tooltip } from "antd";
+import { Segmented, Tabs, Tooltip } from "antd";
 import { ArrowLeft, Check, Image, List, LockKeyhole, Pencil, Plus, Shuffle, Trash2, UnlockKeyhole } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { MatchingSlotConfig } from "@inventory-hub/contracts";
@@ -15,8 +15,9 @@ import { matchingSpecifications, newMatchingSlot, useMatchingGroup, type Matchin
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const typeTabs = [{ key: "ITEM", label: "物品" }, { key: "BAG", label: "袋子" }, { key: "BOX", label: "箱子" }, { key: "WAREHOUSE", label: "柜子" }];
-const modeTabs = [{ key: "CONTAINS", label: "包含" }, { key: "EXACT", label: "符合" }, { key: "ANY", label: "存在" }];
+const typeTabs: Array<{ key: MatchingSlotConfig["type"]; label: string }> = [{ key: "ITEM", label: "物品" }, { key: "BAG", label: "袋子" }, { key: "BOX", label: "箱子" }, { key: "WAREHOUSE", label: "柜子" }];
+const modeTabs: Array<{ key: MatchingSlotConfig["mode"]; label: string }> = [{ key: "CONTAINS", label: "包含" }, { key: "EXACT", label: "符合" }, { key: "ANY", label: "存在" }];
+const displayOptions: Array<{ value: MatchingSlotConfig["display"]; label: string }> = [{ value: "LARGE", label: "大图 + 简洁详情" }, { value: "DETAIL", label: "小图 + 详情" }];
 const modeHelp = {
   CONTAINS: "档案必须包含全部已选分类、标签和规格，允许有其他选项。",
   EXACT: "已选择的每个维度必须与档案选项完全一致，不能多选或少选。",
@@ -184,8 +185,16 @@ function SlotEditor({ slot, busy, onChange, onClose }: { slot: MatchingSlot; bus
   return <Dialog open onClose={onClose} title="配置列表项" description="修改自动保存，分类、标签和规格均可多选，也可以不选。" footer={<Button onClick={onClose} disabled={busy}>完成</Button>}>
     {slot.locked && <div className="mb-4"><Alert title="当前列表项已锁定" tone="info">解锁后可以修改类型和匹配规则。</Alert></div>}
     <Field label="列表项名称"><Input maxLength={120} value={slot.name} disabled={busy} placeholder="例如：上衣、出门包" onChange={(event) => onChange({ name: event.target.value })} /></Field>
-    <Field label="类型"><Tabs activeKey={slot.type} items={typeTabs.map((tab) => ({ ...tab, disabled: ruleDisabled }))} onChange={(type) => onChange({ type: type as MatchingSlotConfig["type"] })} className="matching-config-tabs" /></Field>
-    <Field label="匹配规则"><Tabs activeKey={slot.mode} items={modeTabs.map((tab) => ({ ...tab, disabled: ruleDisabled }))} onChange={(mode) => onChange({ mode: mode as MatchingSlotConfig["mode"] })} className="matching-config-tabs" /><p className="text-xs text-muted-foreground">{modeHelp[slot.mode]}未选维度不限制，全部不选时随机该类型全部档案。</p></Field>
+    <Field label="类型">
+      <Segmented<MatchingSlotConfig["type"]> block size="large" aria-label="类型" name="matching-type" value={slot.type} disabled={ruleDisabled} options={typeTabs.map((tab) => ({ value: tab.key, label: tab.label }))} onChange={(type) => onChange({ type })} className="matching-config-options" />
+    </Field>
+    <Field label="匹配规则">
+      <Segmented<MatchingSlotConfig["mode"]> block size="large" aria-label="匹配规则" name="matching-mode" value={slot.mode} disabled={ruleDisabled} options={modeTabs.map((tab) => ({ value: tab.key, label: tab.label }))} onChange={(mode) => onChange({ mode })} className="matching-config-options" />
+      <p className="text-xs text-muted-foreground">{modeHelp[slot.mode]}未选维度不限制，全部不选时随机该类型全部档案。</p>
+    </Field>
+    <Field label="显示模式">
+      <Segmented<MatchingSlotConfig["display"]> block size="large" aria-label="显示模式" name="matching-display" value={slot.display} disabled={busy} options={displayOptions} onChange={(display) => onChange({ display })} className="matching-config-options" />
+    </Field>
     {taxonomyError && <Alert title={errorMessage(taxonomyError)} tone="error" />}
     <Field label="分类"><TaxonomySelect aria-label="搭配分类" mode="multiple" allowClear maxTagCount="responsive" value={slot.categoryIds} disabled={ruleDisabled || categories.isPending || Boolean(categories.error)} optionFilterProp="label" placeholder="不限分类" options={buildCategoryTreeRows(pageItems(categories.data)).map(({ category, depth }) => ({ value: category.id, label: `${"　".repeat(depth)}${category.name}` }))} onChange={(categoryIds) => onChange({ categoryIds })} /></Field>
     <Field label="标签"><TaxonomySelect aria-label="搭配标签" mode="multiple" allowClear maxTagCount="responsive" value={slot.tagIds} disabled={ruleDisabled || tags.isPending || Boolean(tags.error)} optionFilterProp="label" placeholder="不限标签" options={pageItems(tags.data).map((tag) => ({ value: tag.id, label: tag.name }))} onChange={(tagIds) => onChange({ tagIds })} /></Field>

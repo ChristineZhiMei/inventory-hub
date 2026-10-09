@@ -62,7 +62,8 @@ export function NodeForm({
     })),
   );
   const queryClient = useQueryClient();
-  const recent = useRecentSelections();
+  const [taxonomyPopupOpen, setTaxonomyPopupOpen] = useState(false);
+  const recent = useRecentSelections(taxonomyPopupOpen);
   const recentSpecifications = recent.ids("specification").join(",");
   const [aiBusy, setAiBusy] = useState(false);
   const [retainedCategories, setRetainedCategories] = useState<Category[]>([]);
@@ -71,7 +72,6 @@ export function NodeForm({
   const [specificationSearchInput, setSpecificationSearchInput] = useState("");
   const [specificationSearch, setSpecificationSearch] = useState("");
   const [creatingTaxonomy, setCreatingTaxonomy] = useState<"tag" | "specification" | null>(null);
-  const [taxonomyPopupOpen, setTaxonomyPopupOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
   const [searchParams] = useSearchParams();
   useSelectPopupScrollGuard(mobile && taxonomyPopupOpen);

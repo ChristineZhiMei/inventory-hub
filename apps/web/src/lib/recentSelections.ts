@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 
 export type TaxonomyKind = "category" | "specification" | "tag";
 type History = Partial<Record<TaxonomyKind, string[]>>;
@@ -40,8 +40,13 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useRecentSelections() {
-  const history = readHistory(useSyncExternalStore(subscribe, snapshot, () => ""));
+export function useRecentSelections(deferSorting = false) {
+  const currentSnapshot = useSyncExternalStore(subscribe, snapshot, () => "");
+  const sortingSnapshot = useRef(currentSnapshot);
+  // Record immediately, but keep the open dropdown and paginated query stable.
+  // Closing it exposes the latest ranking on the next render.
+  if (!deferSorting) sortingSnapshot.current = currentSnapshot;
+  const history = readHistory(sortingSnapshot.current);
   return {
     ids: (kind: TaxonomyKind) => history[kind] ?? [],
     sort: <T extends { id: string }>(kind: TaxonomyKind, options: T[]): T[] => {

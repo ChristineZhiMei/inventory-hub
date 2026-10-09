@@ -48,9 +48,6 @@ export function NodeEditorPage({
     queryFn: () => queries.node(sourceItemId!),
     enabled: Boolean(sourceItemId),
   });
-  const inheritedTargetId = sourceItem.data
-    ? closestAllowedParentId(sourceItem.data.path, type)
-    : undefined;
   const mutation = useMutation({
     mutationFn: async (values: NodeFormData & { images: EditableImage[] }) => {
       if (mode === "create") {
@@ -206,7 +203,7 @@ export function NodeEditorPage({
         prefill={copySource.data
           ? copyPrefill(copySource.data, copyFields)
           : sourceItem.data ? copyPrefill(sourceItem.data, ["name", "categories", "specifications", "tags"]) : undefined}
-        defaultTargetId={copyFrom ? copyTargetId : inheritedTargetId}
+        defaultTargetId={copyTargetId}
         onSubmit={(payload) =>
           mutation.mutateAsync(payload).then(() => undefined)
         }
@@ -221,20 +218,4 @@ export function NodeEditorPage({
       />
     </div>
   );
-}
-
-function closestAllowedParentId(
-  path: Array<{ id: string; type: NodeType }> | undefined,
-  childType: NodeType,
-): string | undefined {
-  const allowedParents: Record<NodeType, NodeType[]> = {
-    WAREHOUSE: [],
-    BOX: ["WAREHOUSE"],
-    BAG: ["BOX", "WAREHOUSE"],
-    ITEM: ["BAG", "BOX", "WAREHOUSE"],
-  };
-  return path
-    ?.slice(1)
-    .find((entry) => allowedParents[childType].includes(entry.type))
-    ?.id;
 }
