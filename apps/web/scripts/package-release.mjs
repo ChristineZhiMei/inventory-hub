@@ -10,8 +10,11 @@ const webPackage = JSON.parse(readFileSync(join(packageDirectory, "package.json"
 const desktopPackage = JSON.parse(readFileSync(join(workspaceDirectory, "apps", "desktop", "package.json"), "utf8"));
 const options = parseOptions(process.argv.slice(2));
 const uiVersion = normalizeVersion(options.version || process.env.INVENTORY_HUB_WEB_VERSION || webPackage.version);
-const minDesktopVersion = normalizeVersion(options.minDesktop || process.env.INVENTORY_HUB_MIN_DESKTOP_VERSION || desktopPackage.version);
-const releaseNotes = options.notes || process.env.INVENTORY_HUB_WEB_RELEASE_NOTES || "界面功能与体验更新";
+const minDesktopVersion = normalizeVersion(options.minDesktop || process.env.INVENTORY_HUB_MIN_DESKTOP_VERSION || webPackage.inventoryHub?.minDesktopVersion);
+const releaseNotes = options.notes || process.env.INVENTORY_HUB_WEB_RELEASE_NOTES || webPackage.inventoryHub?.releaseNotes || "界面功能与体验更新";
+if (compareVersions(minDesktopVersion, desktopPackage.version) > 0) {
+  throw new Error("Minimum compatible desktop version exceeds the configured desktop version.");
+}
 const distDirectory = resolve(packageDirectory, "dist");
 const outputDirectory = resolve(options.output || join(packageDirectory, "release"));
 
@@ -93,6 +96,16 @@ function normalizeVersion(value) {
   const match = /^(?:v)?(\d+)\.(\d+)\.(\d+)$/.exec(String(value).trim());
   if (!match) throw new Error(`Invalid semantic version: ${value}`);
   return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+}
+
+function compareVersions(left, right) {
+  const leftParts = normalizeVersion(left).split(".").map(Number);
+  const rightParts = normalizeVersion(right).split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = leftParts[index] - rightParts[index];
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 function parseOptions(args) {

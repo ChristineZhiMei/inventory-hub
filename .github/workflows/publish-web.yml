@@ -1,40 +1,83 @@
 name: Publish Web resources
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/publish-web.yml"
+      - "apps/web/**"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
     inputs:
-      web_version:
-        description: "Web version, for example 0.2.1"
-        required: true
-        type: string
-      min_desktop_version:
-        description: "Minimum compatible desktop version"
-        required: true
-        type: string
-        default: "0.2.0"
       release_notes:
-        description: "User-visible Web release notes"
+        description: "Optional release notes override; versions come from apps/web/package.json"
         required: false
         type: string
-        default: "界面功能与体验更新"
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-web-${{ inputs.web_version }}
+  group: publish-web-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Check Web release
+    runs-on: ubuntu-24.04
+    outputs:
+      should_publish: ${{ steps.release.outputs.should_publish }}
+      version: ${{ steps.release.outputs.version }}
+      min_desktop_version: ${{ steps.release.outputs.min_desktop_version }}
+      release_notes: ${{ steps.release.outputs.release_notes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Web release configuration
+        id: release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_NOTES_OVERRIDE: ${{ inputs.release_notes }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const web = JSON.parse(fs.readFileSync('apps/web/package.json', 'utf8'));
+            const desktop = JSON.parse(fs.readFileSync('apps/desktop/package.json', 'utf8'));
+            const version = web.version;
+            const minimum = web.inventoryHub?.minDesktopVersion;
+            const versionPattern = /^\d+\.\d+\.\d+$/;
+            if (![version, minimum, desktop.version].every(value => typeof value === 'string' && versionPattern.test(value))) {
+              throw new Error('Web and minimum compatible desktop versions must be explicitly configured');
+            }
+            const required = minimum.split('.').map(Number);
+            const available = desktop.version.split('.').map(Number);
+            const difference = required.map((part, index) => part - available[index]).find(value => value !== 0) ?? 0;
+            if (difference > 0) throw new Error('Minimum compatible desktop version exceeds the configured desktop version');
+            core.setOutput('version', version);
+            core.setOutput('min_desktop_version', minimum);
+            core.setOutput('release_notes', process.env.RELEASE_NOTES_OVERRIDE || web.inventoryHub?.releaseNotes || '界面功能与体验更新');
+            try {
+              await github.rest.repos.getReleaseByTag({ ...context.repo, tag: `web-v${version}` });
+              core.notice(`Web ${version} already has a release; skipping publication. Increment the Web version to publish changes.`);
+              core.setOutput('should_publish', 'false');
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.setOutput('should_publish', 'true');
+            }
+
   publish:
-    name: Web ${{ inputs.web_version }}
+    name: Web ${{ needs.prepare.outputs.version }}
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CI: "true"
-      INVENTORY_HUB_WEB_VERSION: ${{ inputs.web_version }}
-      INVENTORY_HUB_MIN_DESKTOP_VERSION: ${{ inputs.min_desktop_version }}
-      INVENTORY_HUB_WEB_RELEASE_NOTES: ${{ inputs.release_notes }}
+      INVENTORY_HUB_WEB_VERSION: ${{ needs.prepare.outputs.version }}
+      INVENTORY_HUB_MIN_DESKTOP_VERSION: ${{ needs.prepare.outputs.min_desktop_version }}
+      INVENTORY_HUB_WEB_RELEASE_NOTES: ${{ needs.prepare.outputs.release_notes }}
 
     steps:
       - name: Checkout
@@ -65,9 +108,9 @@ jobs:
       - name: Publish Web release
         env:
           GH_TOKEN: ${{ github.token }}
-          WEB_VERSION: ${{ inputs.web_version }}
-          MIN_DESKTOP_VERSION: ${{ inputs.min_desktop_version }}
-          RELEASE_NOTES: ${{ inputs.release_notes }}
+          WEB_VERSION: ${{ needs.prepare.outputs.version }}
+          MIN_DESKTOP_VERSION: ${{ needs.prepare.outputs.min_desktop_version }}
+          RELEASE_NOTES: ${{ needs.prepare.outputs.release_notes }}
         run: |
           set -euo pipefail
           tag="web-v${WEB_VERSION}"
@@ -81,13 +124,9 @@ jobs:
             echo "Expected one .ihweb package and one .json metadata file." >&2
             exit 1
           fi
-          if gh release view "${tag}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "${tag}" "${assets[@]}" --repo "${{ github.repository }}" --clobber
-            gh release edit "${tag}" --repo "${{ github.repository }}" --notes-file "${notes_path}"
-          else
-            gh release create "${tag}" "${assets[@]}" \
-              --repo "${{ github.repository }}" \
-              --target "${{ github.sha }}" \
-              --title "Inventory Hub Web ${WEB_VERSION}" \
-              --notes-file "${notes_path}"
-          fi
+          gh release create "${tag}" "${assets[@]}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Inventory Hub Web ${WEB_VERSION}" \
+            --notes-file "${notes_path}" \
+            --latest=false

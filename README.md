@@ -40,6 +40,14 @@ pnpm package:win:x64
 
 构建制品输出到 `apps/desktop/release/`。当前制品未签名；macOS 公证和 Windows 代码签名需要各平台的发行证书。
 
+## 版本与发布
+
+Web 与客户端独立发布。只修改页面时，仅递增 `apps/web/package.json` 的 `version`，保持根目录及 `apps/desktop/package.json` 的版本不变。Web 包的 `inventoryHub.minDesktopVersion` 表示实际所需的最低客户端版本；只有使用了新版客户端接口或核心能力时才提高该值，不随客户端版本自动递增。发布说明填写在 `inventoryHub.releaseNotes`。
+
+合入 master 后，Web 改动触发 `Publish Web resources`，发布 `web-v<版本>`，只包含 `.ihweb` 和 `.json`。客户端、核心服务或接口契约改动触发 `Package desktop`，需要单独递增客户端版本，发布 `v<版本>` 的安装包。已存在对应 Release 时跳过发布，不覆盖原有资源。仅修改发布流程也不会重新打包已发布的客户端版本。
+
+本地 Web 打包执行 `pnpm package:web`；手动发布可运行 `Publish Web resources` 工作流，版本及兼容要求均读取 Web 配置。客户端工作流手动运行时，默认仅生成构建制品，勾选 `publish_release` 才发布尚未发布的客户端版本。
+
 ## 服务器部署
 
 复制 `deploy/.env.example` 为 `deploy/.env`，设置公开访问地址、会话密钥和 HTTPS 证书；首次管理员账号按 [服务器部署说明](deploy/README.md) 在服务器终端创建，然后执行：

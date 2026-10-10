@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "Create or update the GitHub Release for the desktop version"
+        description: "Publish a new desktop version without replacing an existing release"
         required: false
         type: boolean
         default: false
@@ -25,8 +25,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Check desktop release
+    runs-on: ubuntu-24.04
+    outputs:
+      should_package: ${{ steps.release.outputs.should_package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check desktop version
+        id: release
+        uses: actions/github-script@v7
+        env:
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish_release }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { version } = JSON.parse(fs.readFileSync('apps/desktop/package.json', 'utf8'));
+            if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid desktop version');
+            if (process.env.BUILD_ONLY === 'true') {
+              core.setOutput('should_package', 'true');
+              return;
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({ ...context.repo, tag: `v${version}` });
+              core.notice(`Desktop ${version} already has a release; skipping packaging and publication.`);
+              core.setOutput('should_package', 'false');
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.setOutput('should_package', 'true');
+            }
+
   package:
     name: Windows x64
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_package == 'true' }}
     runs-on: windows-2022
     timeout-minutes: 60
 
@@ -63,16 +97,6 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
-      - name: Package Web release
-        shell: pwsh
-        run: |
-          $desktop = Get-Content "apps/desktop/package.json" | ConvertFrom-Json
-          $web = Get-Content "apps/web/package.json" | ConvertFrom-Json
-          pnpm --filter @inventory-hub/web package:release -- `
-            --version $web.version `
-            --min-desktop $desktop.version `
-            --notes "支持独立更新界面资源，客户端改动请查看本版本安装包。"
-
       - name: Package desktop
         run: pnpm --filter @inventory-hub/desktop run package:win:x64
 
@@ -85,8 +109,6 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.zip
             apps/desktop/release/*.blockmap
-            apps/web/release/*.ihweb
-            apps/web/release/*.json
           if-no-files-found: error
           retention-days: 14
 
@@ -101,30 +123,24 @@ jobs:
           $assets = @(
             Get-ChildItem "apps/desktop/release" -File |
               Where-Object { $_.Extension -in ".exe", ".zip", ".blockmap" }
-            Get-ChildItem "apps/web/release" -File |
-              Where-Object { $_.Extension -in ".ihweb", ".json" }
           )
 
           if (-not $assets) {
             throw "No Windows release assets were generated."
           }
 
-          gh release view $tag --repo "${{ github.repository }}" 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $assets.FullName `
-              --repo "${{ github.repository }}" `
-              --clobber
-          } else {
-            $notesPath = Join-Path $env:RUNNER_TEMP "inventory-hub-release-notes.md"
-            @"
-          本版本包含新的 Windows 客户端和可独立导入的 Web 界面资源包。
+          $notesPath = Join-Path $env:RUNNER_TEMP "inventory-hub-release-notes.md"
+          @"
+          本版本包含新的 Windows 客户端安装包。
 
           - Windows 客户端：安装后可在“设置 → 关于与健康 → 界面更新”中更新界面。
-          - Web 资源包：适用于 Inventory Hub $tag 及兼容的新版本客户端。
+          - Web 界面资源独立发布，兼容要求以对应 Web 版本说明为准。
           "@ | Set-Content -Path $notesPath -Encoding utf8
-            gh release create $tag $assets.FullName `
-              --repo "${{ github.repository }}" `
-              --target "${{ github.sha }}" `
-              --title "Inventory Hub $tag" `
-              --notes-file $notesPath
+          gh release create $tag $assets.FullName `
+            --repo "${{ github.repository }}" `
+            --target "${{ github.sha }}" `
+            --title "Inventory Hub $tag" `
+            --notes-file $notesPath
+          if ($LASTEXITCODE -ne 0) {
+            throw "Desktop release publication failed; existing releases are never overwritten."
           }

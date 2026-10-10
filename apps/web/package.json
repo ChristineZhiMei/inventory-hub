@@ -1,6 +1,10 @@
 {
   "name": "@inventory-hub/web",
-  "version": "0.3.1",
+  "version": "0.3.2",
+  "inventoryHub": {
+    "minDesktopVersion": "0.3.0",
+    "releaseNotes": "修复创建与编辑表单的多选排序、手机搜索输入和袋子默认位置，优化搭配配置按钮。仅更新界面资源，兼容 0.3.0 及以上客户端。"
+  },
   "private": true,
   "type": "module",
   "scripts": {
